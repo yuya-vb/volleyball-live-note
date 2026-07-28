@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="YouTubeライブの気になる場面を、再生位置付きメモとして端末に保存できるスポーツ分析ツール"
+    />
+    <title>LIVE NOTE | YouTubeライブ分析メモ</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#memo-text">メモ入力へ移動</a>
+
+    <main class="workspace">
+      <h1 class="visually-hidden">YouTubeライブ分析メモ</h1>
+      <section class="player-column" aria-labelledby="player-heading">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">MONITOR</p>
+            <h2 id="player-heading">ライブ映像</h2>
+          </div>
+          <span id="active-video-label" class="video-id-label">未選択</span>
+        </div>
+
+        <div class="player-frame">
+          <div id="youtube-player">
+            <div id="player-placeholder" class="player-placeholder">
+              <div class="placeholder-icon" aria-hidden="true">▶</div>
+              <p>右の入力欄にYouTube URLまたは動画IDを入力してください</p>
+              <span>ライブ配信・通常動画のどちらでも利用できます</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="playback-controls" aria-label="再生位置操作">
+          <button id="rewind-button" class="control-button" type="button">
+            <span aria-hidden="true">−5</span>
+            5秒戻る
+            <kbd>←</kbd>
+          </button>
+          <button id="forward-button" class="control-button" type="button">
+            <span aria-hidden="true">+5</span>
+            5秒進む
+            <kbd>→</kbd>
+          </button>
+          <button id="live-edge-button" class="control-button live-button" type="button">
+            <span class="live-dot" aria-hidden="true"></span>
+            ライブ地点へ戻る
+            <kbd>Alt L</kbd>
+          </button>
+        </div>
+
+        <div id="player-status" class="player-status" role="status" aria-live="polite">
+          <span class="status-indicator" aria-hidden="true"></span>
+          <div>
+            <strong id="player-status-title">プレイヤーを準備しています</strong>
+            <span id="player-status-detail">YouTube IFrame Player APIを読み込んでいます</span>
+          </div>
+        </div>
+
+        <aside class="shortcut-guide" aria-label="キーボードショートカット">
+          <strong>QUICK KEYS</strong>
+          <span><kbd>Ctrl</kbd> + <kbd>Enter</kbd> メモ保存</span>
+          <span><kbd>Enter</kbd> 再生 / 一時停止</span>
+          <span><kbd>Alt</kbd> + <kbd>L</kbd> ライブ地点</span>
+          <span><kbd>← / →</kbd> 5秒移動</span>
+        </aside>
+      </section>
+
+      <section class="control-column" aria-label="メモ操作">
+        <div id="sharing-block" class="control-block sharing-block" hidden>
+          <div class="sharing-heading">
+            <div>
+              <span class="sharing-kicker">SHARED NOTES</span>
+              <strong>共有メモ</strong>
+            </div>
+            <span id="sharing-status" class="sharing-status is-locked">閲覧モード</span>
+          </div>
+          <div class="input-action-row">
+            <input
+              id="edit-passphrase"
+              type="password"
+              autocomplete="current-password"
+              placeholder="編集用の合言葉"
+              aria-label="編集用の合言葉"
+            />
+            <button id="unlock-edit-button" class="secondary-button" type="button">
+              編集を有効化
+            </button>
+          </div>
+          <p class="field-help">
+            メモは全員に共有されます。追加・編集・削除には合言葉が必要です。
+          </p>
+        </div>
+
+        <div class="control-block load-block">
+          <label for="video-input">YouTube URL / 動画ID</label>
+          <div class="input-action-row">
+            <input
+              id="video-input"
+              type="text"
+              inputmode="url"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="https://www.youtube.com/watch?v=..."
+            />
+            <button id="load-video-button" class="secondary-button" type="button">動画を読み込む</button>
+          </div>
+          <p class="field-help">watch / youtu.be / live URL、または11文字の動画IDに対応</p>
+        </div>
+
+        <div class="control-block memo-compose">
+          <div class="label-row">
+            <label for="memo-text">気づきを記録</label>
+            <span id="memo-character-count">0文字</span>
+          </div>
+          <textarea
+            id="memo-text"
+            rows="7"
+            placeholder="例：タイムアウト後、相手のレフトがクロスを多用。ブロックの間隔をあとで確認する。"
+          ></textarea>
+
+          <div class="save-settings">
+            <label for="save-offset">記録する位置</label>
+            <select id="save-offset">
+              <option value="0">現在位置</option>
+              <option value="5" selected>5秒前</option>
+              <option value="10">10秒前</option>
+              <option value="15">15秒前</option>
+              <option value="30">30秒前</option>
+            </select>
+          </div>
+
+          <button id="save-memo-button" class="primary-button" type="button">
+            <span class="save-button-icon" aria-hidden="true">＋</span>
+            <span>
+              現在位置にメモを保存
+              <small>Ctrl + Enter</small>
+            </span>
+          </button>
+        </div>
+
+        <div class="control-block notes-block">
+          <div class="notes-toolbar">
+            <div class="search-field">
+              <label for="memo-search">メモを検索</label>
+              <input id="memo-search" type="search" placeholder="キーワードを入力" />
+            </div>
+            <div class="sort-field">
+              <label for="memo-sort">並び替え</label>
+              <select id="memo-sort">
+                <option value="time-asc" selected>再生時間が早い順</option>
+                <option value="time-desc">再生時間が遅い順</option>
+                <option value="date-desc">保存日時が新しい順</option>
+                <option value="date-asc">保存日時が古い順</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="utility-actions">
+            <button id="export-csv-button" class="utility-button" type="button">CSV出力</button>
+            <button id="delete-all-button" class="utility-button danger-button" type="button">全件削除</button>
+          </div>
+
+          <div class="notes-heading">
+            <h2>保存済みメモ</h2>
+            <span id="memo-count" class="memo-count">0件</span>
+          </div>
+
+          <div id="memo-list" class="memo-list" aria-live="polite"></div>
+        </div>
+      </section>
+    </main>
+
+    <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+
+    <noscript>
+      <div class="noscript-message">このアプリを使用するにはJavaScriptを有効にしてください。</div>
+    </noscript>
+
+    <script src="script.js"></script>
+  </body>
+</html>
