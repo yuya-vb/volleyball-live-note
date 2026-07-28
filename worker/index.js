@@ -7,52 +7,69 @@ export default {
     const url = new URL(request.url);
 
     try {
+      if (url.pathname.startsWith("/api/") && request.method === "OPTIONS") {
+        return withCors(request, new Response(null, { status: 204 }));
+      }
+
       if (url.pathname === "/api/health" && request.method === "GET") {
-        return jsonResponse({ shared: true });
+        return withCors(request, jsonResponse({ shared: true }));
       }
 
       if (url.pathname === "/api/auth/verify" && request.method === "POST") {
-        return (await isAuthorized(request, env))
+        const response = (await isAuthorized(request, env))
           ? jsonResponse({ authorized: true })
           : jsonResponse({ error: "合言葉が正しくありません。" }, 401);
+        return withCors(request, response);
       }
 
       if (url.pathname === "/api/notes" && request.method === "GET") {
-        return listNotes(url, env);
+        return withCors(request, await listNotes(url, env));
       }
 
       if (url.pathname === "/api/notes" && request.method === "POST") {
         if (!(await isAuthorized(request, env))) {
-          return jsonResponse({ error: "編集用の合言葉が必要です。" }, 401);
+          return withCors(
+            request,
+            jsonResponse({ error: "編集用の合言葉が必要です。" }, 401),
+          );
         }
-        return createNote(request, env);
+        return withCors(request, await createNote(request, env));
       }
 
       if (url.pathname === "/api/notes" && request.method === "DELETE") {
         if (!(await isAuthorized(request, env))) {
-          return jsonResponse({ error: "編集用の合言葉が必要です。" }, 401);
+          return withCors(
+            request,
+            jsonResponse({ error: "編集用の合言葉が必要です。" }, 401),
+          );
         }
-        return deleteVideoNotes(url, env);
+        return withCors(request, await deleteVideoNotes(url, env));
       }
 
       if (url.pathname.startsWith("/api/notes/")) {
         if (!(await isAuthorized(request, env))) {
-          return jsonResponse({ error: "編集用の合言葉が必要です。" }, 401);
+          return withCors(
+            request,
+            jsonResponse({ error: "編集用の合言葉が必要です。" }, 401),
+          );
         }
         const noteId = decodeURIComponent(url.pathname.slice("/api/notes/".length));
         if (!noteId || noteId.length > 200) {
-          return jsonResponse({ error: "メモIDが正しくありません。" }, 400);
+          return withCors(
+            request,
+            jsonResponse({ error: "メモIDが正しくありません。" }, 400),
+          );
         }
         if (request.method === "PUT") {
-          return updateNote(request, env, noteId);
+          return withCors(request, await updateNote(request, env, noteId));
         }
         if (request.method === "DELETE") {
-          return deleteNote(env, noteId);
+          return withCors(request, await deleteNote(env, noteId));
         }
       }
 
       if (url.pathname.startsWith("/api/")) {
-        return jsonResponse({ error: "APIが見つかりません。" }, 404);
+        return withCors(request, jsonResponse({ error: "APIが見つかりません。" }, 404));
       }
 
       const assetResponse = await env.ASSETS.fetch(request);
@@ -63,7 +80,10 @@ export default {
       return response;
     } catch (error) {
       console.error("Worker request failed:", error);
-      return jsonResponse({ error: "サーバー処理に失敗しました。" }, 500);
+      return withCors(
+        request,
+        jsonResponse({ error: "サーバー処理に失敗しました。" }, 500),
+      );
     }
   },
 };
@@ -236,4 +256,21 @@ function jsonResponse(data, status = 200) {
       "X-Content-Type-Options": "nosniff",
     },
   });
+}
+
+function withCors(request, response) {
+  const origin = request.headers.get("Origin") || "";
+  if (origin !== "https://volleyball-live-note.pages.dev") {
+    return response;
+  }
+
+  const corsResponse = new Response(response.body, response);
+  corsResponse.headers.set("Access-Control-Allow-Origin", origin);
+  corsResponse.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  corsResponse.headers.set(
+    "Access-Control-Allow-Headers",
+    "Content-Type, X-Edit-Passphrase",
+  );
+  corsResponse.headers.set("Vary", "Origin");
+  return corsResponse;
 }

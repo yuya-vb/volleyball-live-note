@@ -7,6 +7,10 @@
   const API_LOAD_TIMEOUT_MS = 15000;
   const SEEK_VERIFY_DELAY_MS = 1100;
   const TOAST_DURATION_MS = 4200;
+  const SHARED_API_BASE =
+    window.location.hostname.endsWith(".pages.dev")
+      ? "https://youtube-live-memo-jp.junmari10221122.chatgpt.site"
+      : "";
 
   const state = {
     player: null,
@@ -94,7 +98,7 @@
 
   async function detectSharedMode() {
     try {
-      const response = await fetch("/api/health", {
+      const response = await fetch(`${SHARED_API_BASE}/api/health`, {
         headers: { Accept: "application/json" },
         cache: "no-store",
       });
@@ -140,7 +144,7 @@
 
     elements.unlockEditButton.disabled = true;
     try {
-      const response = await fetch("/api/auth/verify", {
+      const response = await fetch(`${SHARED_API_BASE}/api/auth/verify`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -989,7 +993,7 @@
 
     let response;
     try {
-      response = await fetch(path, requestOptions);
+      response = await fetch(`${SHARED_API_BASE}${path}`, requestOptions);
     } catch (error) {
       throw error;
     }
