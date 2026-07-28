@@ -22,8 +22,6 @@
     editingMemoId: "",
     apiTimeoutId: null,
     sharedMode: false,
-    editUnlocked: false,
-    editPassphrase: "",
     data: createEmptyData(),
   };
 
@@ -64,8 +62,6 @@
     elements.activeVideoLabel = document.getElementById("active-video-label");
     elements.sharingBlock = document.getElementById("sharing-block");
     elements.sharingStatus = document.getElementById("sharing-status");
-    elements.editPassphrase = document.getElementById("edit-passphrase");
-    elements.unlockEditButton = document.getElementById("unlock-edit-button");
     elements.toastRegion = document.getElementById("toast-region");
   }
 
@@ -86,13 +82,6 @@
     elements.rewindButton.addEventListener("click", () => movePlaybackBy(-5));
     elements.forwardButton.addEventListener("click", () => movePlaybackBy(5));
     elements.liveEdgeButton.addEventListener("click", seekToLiveEdge);
-    elements.unlockEditButton.addEventListener("click", unlockSharedEditing);
-    elements.editPassphrase.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        unlockSharedEditing();
-      }
-    });
     document.addEventListener("keydown", handleKeyboardShortcuts);
   }
 
@@ -113,102 +102,14 @@
       state.sharedMode = true;
       state.data = createEmptyData();
       elements.sharingBlock.hidden = false;
-      updateSharingStatus(false);
       renderMemoList();
       updateDataActionButtons();
 
-      const savedPassphrase = readSessionPassphrase();
-      if (savedPassphrase) {
-        elements.editPassphrase.value = savedPassphrase;
-        await unlockSharedEditing({ silent: true });
-      }
       if (state.activeVideoId) {
         await loadSharedMemos(state.activeVideoId);
       }
     } catch (error) {
       console.info("Shared API is not available; using local storage.", error);
-    }
-  }
-
-  async function unlockSharedEditing(options = {}) {
-    if (!state.sharedMode) {
-      return;
-    }
-
-    const passphrase = elements.editPassphrase.value;
-    if (!passphrase) {
-      showToast("編集用の合言葉を入力してください。", "error");
-      elements.editPassphrase.focus();
-      return;
-    }
-
-    elements.unlockEditButton.disabled = true;
-    try {
-      const response = await fetch(`${SHARED_API_BASE}/api/auth/verify`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Edit-Passphrase": passphrase,
-        },
-        body: "{}",
-      });
-      if (!response.ok) {
-        throw new Error(response.status === 401 ? "AUTH_FAILED" : "VERIFY_FAILED");
-      }
-
-      state.editPassphrase = passphrase;
-      state.editUnlocked = true;
-      writeSessionPassphrase(passphrase);
-      updateSharingStatus(true);
-      elements.editPassphrase.value = "";
-      if (!options.silent) {
-        showToast("共有メモの編集を有効にしました。", "success");
-      }
-    } catch (error) {
-      state.editPassphrase = "";
-      state.editUnlocked = false;
-      clearSessionPassphrase();
-      updateSharingStatus(false);
-      if (!options.silent) {
-        showToast(
-          error.message === "AUTH_FAILED"
-            ? "合言葉が正しくありません。"
-            : "編集権限を確認できませんでした。",
-          "error",
-        );
-      }
-    } finally {
-      elements.unlockEditButton.disabled = false;
-    }
-  }
-
-  function updateSharingStatus(unlocked) {
-    elements.sharingStatus.textContent = unlocked ? "編集・削除可能" : "追加できます";
-    elements.sharingStatus.classList.toggle("is-unlocked", unlocked);
-    elements.sharingStatus.classList.toggle("is-locked", !unlocked);
-  }
-
-  function readSessionPassphrase() {
-    try {
-      return sessionStorage.getItem("youtubeLiveMemo.editPassphrase") || "";
-    } catch {
-      return "";
-    }
-  }
-
-  function writeSessionPassphrase(passphrase) {
-    try {
-      sessionStorage.setItem("youtubeLiveMemo.editPassphrase", passphrase);
-    } catch (error) {
-      console.warn("Could not save edit session.", error);
-    }
-  }
-
-  function clearSessionPassphrase() {
-    try {
-      sessionStorage.removeItem("youtubeLiveMemo.editPassphrase");
-    } catch (error) {
-      console.warn("Could not clear edit session.", error);
     }
   }
 
@@ -760,10 +661,6 @@
       showToast("メモ本文を空にはできません。", "error");
       return;
     }
-    if (state.sharedMode && !ensureSharedEditing()) {
-      return;
-    }
-
     const currentMemos = getCurrentVideoMemos();
     const targetExists = currentMemos.some((memo) => memo.id === memoId);
     if (!targetExists) {
@@ -811,10 +708,6 @@
       showToast("削除対象のメモが見つかりません。", "error");
       return;
     }
-    if (state.sharedMode && !ensureSharedEditing()) {
-      return;
-    }
-
     try {
       if (state.sharedMode) {
         await requestSharedApi(`/api/notes/${encodeURIComponent(memoId)}`, {
@@ -852,10 +745,6 @@
     if (!confirmed) {
       return;
     }
-    if (state.sharedMode && !ensureSharedEditing()) {
-      return;
-    }
-
     try {
       if (state.sharedMode) {
         await requestSharedApi(`/api/notes?videoId=${encodeURIComponent(state.activeVideoId)}`, {
@@ -935,15 +824,6 @@
     });
   }
 
-  function ensureSharedEditing() {
-    if (state.editUnlocked && state.editPassphrase) {
-      return true;
-    }
-    showToast("編集用の合言葉を入力して、編集を有効にしてください。", "error");
-    elements.editPassphrase.focus();
-    return false;
-  }
-
   async function loadSharedMemos(videoId) {
     if (!state.sharedMode || !VIDEO_ID_PATTERN.test(videoId)) {
       return;
@@ -983,10 +863,6 @@
       headers["Content-Type"] = "application/json";
       requestOptions.body = JSON.stringify(options.body);
     }
-    if (requestOptions.method !== "GET" && state.editPassphrase) {
-      headers["X-Edit-Passphrase"] = state.editPassphrase;
-    }
-
     let response;
     try {
       response = await fetch(`${SHARED_API_BASE}${path}`, requestOptions);
@@ -1001,16 +877,6 @@
       result = {};
     }
 
-    if (response.status === 401) {
-      state.editUnlocked = false;
-      state.editPassphrase = "";
-      clearSessionPassphrase();
-      updateSharingStatus(false);
-      showToast("編集権限がありません。合言葉をもう一度入力してください。", "error");
-      const authError = new Error("AUTH_REQUIRED");
-      authError.handled = true;
-      throw authError;
-    }
     if (!response.ok) {
       showToast(result.error || "共有データの処理に失敗しました。", "error");
       const requestError = new Error(`SHARED_REQUEST_FAILED_${response.status}`);

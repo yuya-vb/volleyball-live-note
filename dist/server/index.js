@@ -15,13 +15,6 @@ export default {
         return withCors(request, jsonResponse({ shared: true }));
       }
 
-      if (url.pathname === "/api/auth/verify" && request.method === "POST") {
-        const response = (await isAuthorized(request, env))
-          ? jsonResponse({ authorized: true })
-          : jsonResponse({ error: "合言葉が正しくありません。" }, 401);
-        return withCors(request, response);
-      }
-
       if (url.pathname === "/api/notes" && request.method === "GET") {
         return withCors(request, await listNotes(url, env));
       }
@@ -31,22 +24,10 @@ export default {
       }
 
       if (url.pathname === "/api/notes" && request.method === "DELETE") {
-        if (!(await isAuthorized(request, env))) {
-          return withCors(
-            request,
-            jsonResponse({ error: "編集用の合言葉が必要です。" }, 401),
-          );
-        }
         return withCors(request, await deleteVideoNotes(url, env));
       }
 
       if (url.pathname.startsWith("/api/notes/")) {
-        if (!(await isAuthorized(request, env))) {
-          return withCors(
-            request,
-            jsonResponse({ error: "編集用の合言葉が必要です。" }, 401),
-          );
-        }
         const noteId = decodeURIComponent(url.pathname.slice("/api/notes/".length));
         if (!noteId || noteId.length > 200) {
           return withCors(
@@ -210,27 +191,6 @@ async function readJsonBody(request) {
   }
 }
 
-async function isAuthorized(request, env) {
-  const expected = typeof env.EDIT_PASSPHRASE === "string" ? env.EDIT_PASSPHRASE : "";
-  const supplied = request.headers.get("X-Edit-Passphrase") || "";
-  if (!expected || !supplied) {
-    return false;
-  }
-
-  const encoder = new TextEncoder();
-  const [expectedHash, suppliedHash] = await Promise.all([
-    crypto.subtle.digest("SHA-256", encoder.encode(expected)),
-    crypto.subtle.digest("SHA-256", encoder.encode(supplied)),
-  ]);
-  const first = new Uint8Array(expectedHash);
-  const second = new Uint8Array(suppliedHash);
-  let difference = first.length ^ second.length;
-  for (let index = 0; index < Math.min(first.length, second.length); index += 1) {
-    difference |= first[index] ^ second[index];
-  }
-  return difference === 0;
-}
-
 function mapNoteRow(row) {
   return {
     id: String(row.id),
@@ -263,7 +223,7 @@ function withCors(request, response) {
   corsResponse.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
   corsResponse.headers.set(
     "Access-Control-Allow-Headers",
-    "Content-Type, X-Edit-Passphrase",
+    "Content-Type",
   );
   corsResponse.headers.set("Vary", "Origin");
   return corsResponse;
