@@ -434,55 +434,6 @@ kbd {
   border-radius: var(--radius);
 }
 
-.sharing-block[hidden] {
-  display: none;
-}
-
-.sharing-block {
-  border-left: 3px solid var(--cyan);
-}
-
-.sharing-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 13px;
-}
-
-.sharing-heading > div {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.sharing-heading strong {
-  font-size: 0.92rem;
-}
-
-.sharing-kicker {
-  color: var(--cyan);
-  font-size: 0.6rem;
-  font-weight: 850;
-  letter-spacing: 0.13em;
-}
-
-.sharing-status {
-  padding: 4px 8px;
-  color: var(--warning);
-  font-size: 0.65rem;
-  font-weight: 800;
-  background: rgb(255 193 90 / 8%);
-  border: 1px solid rgb(255 193 90 / 24%);
-  border-radius: 4px;
-}
-
-.sharing-status.is-unlocked {
-  color: var(--success);
-  background: rgb(77 214 168 / 8%);
-  border-color: rgb(77 214 168 / 24%);
-}
-
 label {
   display: block;
   margin-bottom: 8px;

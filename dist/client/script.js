@@ -60,8 +60,6 @@
     elements.playerStatusTitle = document.getElementById("player-status-title");
     elements.playerStatusDetail = document.getElementById("player-status-detail");
     elements.activeVideoLabel = document.getElementById("active-video-label");
-    elements.sharingBlock = document.getElementById("sharing-block");
-    elements.sharingStatus = document.getElementById("sharing-status");
     elements.toastRegion = document.getElementById("toast-region");
   }
 
@@ -101,7 +99,6 @@
 
       state.sharedMode = true;
       state.data = createEmptyData();
-      elements.sharingBlock.hidden = false;
       renderMemoList();
       updateDataActionButtons();
 
