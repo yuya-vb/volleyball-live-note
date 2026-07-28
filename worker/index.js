@@ -27,12 +27,6 @@ export default {
       }
 
       if (url.pathname === "/api/notes" && request.method === "POST") {
-        if (!(await isAuthorized(request, env))) {
-          return withCors(
-            request,
-            jsonResponse({ error: "編集用の合言葉が必要です。" }, 401),
-          );
-        }
         return withCors(request, await createNote(request, env));
       }
 

@@ -183,7 +183,7 @@
   }
 
   function updateSharingStatus(unlocked) {
-    elements.sharingStatus.textContent = unlocked ? "編集可能" : "閲覧モード";
+    elements.sharingStatus.textContent = unlocked ? "編集・削除可能" : "追加できます";
     elements.sharingStatus.classList.toggle("is-unlocked", unlocked);
     elements.sharingStatus.classList.toggle("is-locked", !unlocked);
   }
@@ -441,10 +441,6 @@
     if (!canUsePlayer()) {
       return;
     }
-    if (state.sharedMode && !ensureSharedEditing()) {
-      return;
-    }
-
     try {
       const currentTime = Number(state.player.getCurrentTime());
       if (!Number.isFinite(currentTime) || currentTime < 0) {
@@ -987,7 +983,7 @@
       headers["Content-Type"] = "application/json";
       requestOptions.body = JSON.stringify(options.body);
     }
-    if (requestOptions.method !== "GET") {
+    if (requestOptions.method !== "GET" && state.editPassphrase) {
       headers["X-Edit-Passphrase"] = state.editPassphrase;
     }
 
