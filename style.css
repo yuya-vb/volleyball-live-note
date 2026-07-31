@@ -896,25 +896,68 @@ select:hover {
 
   .workspace {
     height: 100vh;
+    height: 100dvh;
     min-height: 0;
+    padding-bottom: 10px;
     overflow: hidden;
   }
 
-  .player-column,
+  .player-column {
+    height: 100%;
+    min-height: 0;
+    padding-right: 5px;
+    overflow: hidden;
+  }
+
+  .player-frame {
+    width: min(100%, calc(177.78vh - 318px));
+    width: min(100%, calc(177.78dvh - 318px));
+    margin-inline: auto;
+  }
+
   .control-column {
     height: 100%;
     min-height: 0;
+    padding-right: 7px;
+    overflow-x: hidden;
     overflow-y: auto;
+    overscroll-behavior: contain;
     scrollbar-color: var(--line-strong) transparent;
     scrollbar-width: thin;
   }
 
-  .player-column {
-    padding-right: 5px;
+  .shortcut-guide {
+    display: none;
   }
 
-  .control-column {
-    padding-right: 7px;
+  .section-heading {
+    margin-bottom: 6px;
+  }
+
+  .playback-controls {
+    margin-top: 8px;
+  }
+
+  .control-button {
+    min-height: 48px;
+    padding-block: 8px;
+  }
+
+  .player-status {
+    min-height: 50px;
+    margin-top: 8px;
+    padding: 8px 12px;
+  }
+}
+
+@media (min-width: 1121px) and (max-height: 650px) {
+  .player-frame {
+    width: min(100%, calc(177.78vh - 215px));
+    width: min(100%, calc(177.78dvh - 215px));
+  }
+
+  .player-status {
+    display: none;
   }
 }
 
