@@ -1077,17 +1077,19 @@
       togglePlayback();
     } else if (
       event.key === "ArrowLeft" &&
-      !event.altKey &&
+      event.altKey &&
       !event.ctrlKey &&
-      !event.metaKey
+      !event.metaKey &&
+      !event.shiftKey
     ) {
       event.preventDefault();
       movePlaybackBy(-5);
     } else if (
       event.key === "ArrowRight" &&
-      !event.altKey &&
+      event.altKey &&
       !event.ctrlKey &&
-      !event.metaKey
+      !event.metaKey &&
+      !event.shiftKey
     ) {
       event.preventDefault();
       movePlaybackBy(5);
