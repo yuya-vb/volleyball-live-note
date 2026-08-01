@@ -116,6 +116,17 @@ CSVには次の項目が含まれます。
 - 合言葉やログインは必要ありません。
 - メモの検索、並び替え、CSV出力も全員が利用できます。
 
+## Cloudflare Pagesへの自動公開
+
+`.github/workflows/deploy-cloudflare-pages.yml` により、`main` ブランチへ変更を送ると、静的ファイルだけを既存のCloudflare Pagesプロジェクト `volleyball-live-note` へ自動公開します。
+
+GitHubリポジトリの「Settings」→「Secrets and variables」→「Actions」に、次のRepository secretsを登録する必要があります。
+
+- `CLOUDFLARE_ACCOUNT_ID`：CloudflareアカウントID
+- `CLOUDFLARE_API_TOKEN`：Cloudflare Pagesの編集権限を持つAPIトークン
+
+シークレット値はコードやGitHub Actionsのログには記載しないでください。手動実行する場合は、GitHubの「Actions」→「Deploy to Cloudflare Pages」→「Run workflow」を使用します。
+
 ## Live Server版のlocalStorage保存仕様
 
 - 保存キーは `youtubeLiveMemoApp.v1` です。
