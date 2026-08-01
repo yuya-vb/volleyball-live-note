@@ -122,8 +122,8 @@ CSVには次の項目が含まれます。
 
 GitHubリポジトリの「Settings」→「Secrets and variables」→「Actions」に、次のRepository secretsを登録する必要があります。
 
-- `CLOUDFLARE_ACCOUNT_ID`：CloudflareアカウントID
-- `CLOUDFLARE_API_TOKEN`：Cloudflare Pagesの編集権限を持つAPIトークン
+- `CLOUDFARE_ACCOUNT_ID`：CloudflareアカウントID
+- `CLOUDFARE_API_TOKEN`：Cloudflare Pagesの編集権限を持つAPIトークン
 
 シークレット値はコードやGitHub Actionsのログには記載しないでください。手動実行する場合は、GitHubの「Actions」→「Deploy to Cloudflare Pages」→「Run workflow」を使用します。
 
