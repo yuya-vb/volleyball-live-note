@@ -15,14 +15,8 @@
 
     <main class="workspace">
       <h1 class="visually-hidden">YouTubeライブ分析メモ</h1>
-      <section class="player-column" aria-labelledby="player-heading">
-        <div class="section-heading">
-          <div>
-            <p class="section-kicker">MONITOR</p>
-            <h2 id="player-heading">ライブ映像</h2>
-          </div>
-          <span id="active-video-label" class="video-id-label">未選択</span>
-        </div>
+      <section class="player-column" aria-label="ライブ映像とローテーション">
+        <span id="active-video-label" class="visually-hidden">未選択</span>
 
         <div class="player-frame">
           <div id="youtube-player">
@@ -51,6 +45,105 @@
             <kbd>Alt L</kbd>
           </button>
         </div>
+
+        <section id="rotation-panel" class="rotation-panel" aria-labelledby="rotation-heading">
+          <div class="rotation-panel-header">
+            <div class="rotation-title-group">
+              <h2 id="rotation-heading">ローテーション</h2>
+              <span id="rotation-video-hint">動画を読み込むと保存されます</span>
+            </div>
+            <div class="rotation-panel-actions">
+              <button
+                id="rotation-toggle-button"
+                class="rotation-header-button"
+                type="button"
+                aria-expanded="true"
+                aria-controls="rotation-content"
+              >
+                折りたたむ
+              </button>
+              <button id="rotation-reset-button" class="rotation-header-button reset" type="button">
+                初期化
+              </button>
+            </div>
+          </div>
+
+          <div id="rotation-content" class="rotation-content">
+            <article class="rotation-team home-team" data-rotation-team="home">
+              <div class="rotation-team-header">
+                <strong>自チーム</strong>
+                <span id="home-rotation-label" class="rotation-number">R1</span>
+              </div>
+              <div class="rotation-court" aria-label="自チームのローテーション配置">
+                <label class="rotation-slot" data-position="4">
+                  <span>P4</span>
+                  <input data-team="home" data-position="4" maxlength="12" placeholder="背番号・名前" />
+                </label>
+                <label class="rotation-slot" data-position="3">
+                  <span>P3</span>
+                  <input data-team="home" data-position="3" maxlength="12" placeholder="背番号・名前" />
+                </label>
+                <label class="rotation-slot" data-position="2">
+                  <span>P2</span>
+                  <input data-team="home" data-position="2" maxlength="12" placeholder="背番号・名前" />
+                </label>
+                <label class="rotation-slot back-row" data-position="5">
+                  <span>P5</span>
+                  <input data-team="home" data-position="5" maxlength="12" placeholder="背番号・名前" />
+                </label>
+                <label class="rotation-slot back-row" data-position="6">
+                  <span>P6</span>
+                  <input data-team="home" data-position="6" maxlength="12" placeholder="背番号・名前" />
+                </label>
+                <label class="rotation-slot back-row" data-position="1">
+                  <span>P1</span>
+                  <input data-team="home" data-position="1" maxlength="12" placeholder="背番号・名前" />
+                </label>
+              </div>
+              <div class="rotation-controls">
+                <button type="button" data-team="home" data-direction="previous">← 1つ戻す</button>
+                <button type="button" data-team="home" data-direction="next">1つ回す →</button>
+              </div>
+            </article>
+
+            <article class="rotation-team away-team" data-rotation-team="away">
+              <div class="rotation-team-header">
+                <strong>相手チーム</strong>
+                <span id="away-rotation-label" class="rotation-number">R1</span>
+              </div>
+              <div class="rotation-court" aria-label="相手チームのローテーション配置">
+                <label class="rotation-slot" data-position="4">
+                  <span>P4</span>
+                  <input data-team="away" data-position="4" maxlength="12" placeholder="背番号・名前" />
+                </label>
+                <label class="rotation-slot" data-position="3">
+                  <span>P3</span>
+                  <input data-team="away" data-position="3" maxlength="12" placeholder="背番号・名前" />
+                </label>
+                <label class="rotation-slot" data-position="2">
+                  <span>P2</span>
+                  <input data-team="away" data-position="2" maxlength="12" placeholder="背番号・名前" />
+                </label>
+                <label class="rotation-slot back-row" data-position="5">
+                  <span>P5</span>
+                  <input data-team="away" data-position="5" maxlength="12" placeholder="背番号・名前" />
+                </label>
+                <label class="rotation-slot back-row" data-position="6">
+                  <span>P6</span>
+                  <input data-team="away" data-position="6" maxlength="12" placeholder="背番号・名前" />
+                </label>
+                <label class="rotation-slot back-row" data-position="1">
+                  <span>P1</span>
+                  <input data-team="away" data-position="1" maxlength="12" placeholder="背番号・名前" />
+                </label>
+              </div>
+              <div class="rotation-controls">
+                <button type="button" data-team="away" data-direction="previous">← 1つ戻す</button>
+                <button type="button" data-team="away" data-direction="next">1つ回す →</button>
+              </div>
+            </article>
+          </div>
+        </section>
 
         <div id="player-status" class="player-status" role="status" aria-live="polite">
           <span class="status-indicator" aria-hidden="true"></span>
