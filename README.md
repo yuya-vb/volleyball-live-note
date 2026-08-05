@@ -92,7 +92,7 @@ youtube-live-memo/
 | 5秒戻る | `Alt + ←` |
 | 5秒進む | `Alt + →` |
 
-`Ctrl + Enter` はinputやtextareaにフォーカスがあるときも動作します。それ以外のショートカットは、入力欄・textarea・selectにフォーカスがある間は無効になり、文字入力を妨げません。ボタンやリンクにフォーカスがあるときの `Enter` は、通常どおりその要素を操作します。
+`Ctrl + Enter`、`Alt + L`、`Alt + ←`、`Alt + →` は、inputやtextareaにフォーカスがあるときも動作します。`Enter` による再生・一時停止だけは、入力欄・textarea・selectにフォーカスがある間は無効になり、文字入力を妨げません。ボタンやリンクにフォーカスがあるときの `Enter` は、通常どおりその要素を操作します。
 
 ## CSV出力
 

@@ -6,6 +6,10 @@
   const VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
   const API_LOAD_TIMEOUT_MS = 15000;
   const SEEK_VERIFY_DELAY_MS = 1100;
+  const SEEK_TOLERANCE_SECONDS = 3.5;
+  const SEEK_MAX_ATTEMPTS = 2;
+  const LIVE_EDGE_RETRY_DELAY_MS = 400;
+  const LIVE_EDGE_MAX_ATTEMPTS = 5;
   const TOAST_DURATION_MS = 4200;
   const SHARED_API_BASE =
     window.location.hostname.endsWith(".pages.dev")
@@ -21,6 +25,7 @@
     loadedVideoId: "",
     editingMemoId: "",
     apiTimeoutId: null,
+    seekRequestId: 0,
     sharedMode: false,
     data: createEmptyData(),
   };
@@ -180,6 +185,7 @@
       return;
     }
 
+    state.seekRequestId += 1;
     state.activeVideoId = videoId;
     state.pendingVideoId = videoId;
     state.editingMemoId = "";
@@ -396,32 +402,74 @@
     }
 
     try {
-      state.player.seekTo(memo.time, true);
-      state.player.playVideo();
+      seekWithRetry(memo.time, {
+        playAfterSeek: true,
+        failureMessage:
+          "指定位置へ移動できなかった可能性があります。ライブのDVR範囲を確認してください。",
+      });
       showToast(`${formatPlaybackTime(memo.time)} へ移動しました。`, "success");
-      verifySeekPosition(memo.time);
     } catch (error) {
       console.error("Seek failed:", error);
       showToast("指定位置へ移動できません。DVRが有効か確認してください。", "error");
     }
   }
 
-  function verifySeekPosition(targetTime) {
+  function seekWithRetry(targetTime, options = {}) {
+    const requestId = options.requestId ?? ++state.seekRequestId;
+    const tolerance = options.tolerance ?? SEEK_TOLERANCE_SECONDS;
+    const failureMessage =
+      options.failureMessage || "再生位置を移動できなかった可能性があります。";
+
+    issueSeek(targetTime, options.playAfterSeek === true);
+    verifySeekPosition(targetTime, requestId, 1, {
+      failureMessage,
+      playAfterSeek: options.playAfterSeek === true,
+      tolerance,
+    });
+  }
+
+  function issueSeek(targetTime, playAfterSeek) {
+    state.player.seekTo(targetTime, true);
+    if (playAfterSeek) {
+      state.player.playVideo();
+    }
+  }
+
+  function verifySeekPosition(targetTime, requestId, attempt, options) {
     window.setTimeout(() => {
-      if (!state.playerReady || !state.player) {
+      if (requestId !== state.seekRequestId || !state.playerReady || !state.player) {
         return;
       }
 
       try {
         const actualTime = Number(state.player.getCurrentTime());
-        if (Number.isFinite(actualTime) && Math.abs(actualTime - targetTime) > 8) {
-          showToast(
-            "指定位置へ移動できなかった可能性があります。ライブのDVR範囲を確認してください。",
-            "warning",
-          );
+        const reachedTarget =
+          Number.isFinite(actualTime) &&
+          Math.abs(actualTime - targetTime) <= options.tolerance;
+        if (reachedTarget) {
+          return;
         }
+
+        if (attempt < SEEK_MAX_ATTEMPTS) {
+          issueSeek(targetTime, options.playAfterSeek);
+          verifySeekPosition(targetTime, requestId, attempt + 1, options);
+          return;
+        }
+
+        showToast(options.failureMessage, "warning");
       } catch (error) {
         console.warn("Seek verification failed:", error);
+        if (attempt < SEEK_MAX_ATTEMPTS) {
+          try {
+            issueSeek(targetTime, options.playAfterSeek);
+            verifySeekPosition(targetTime, requestId, attempt + 1, options);
+          } catch (retryError) {
+            console.warn("Seek retry failed:", retryError);
+            showToast(options.failureMessage, "warning");
+          }
+        } else {
+          showToast(options.failureMessage, "warning");
+        }
       }
     }, SEEK_VERIFY_DELAY_MS);
   }
@@ -431,6 +479,7 @@
       return;
     }
 
+    const requestId = ++state.seekRequestId;
     try {
       const currentTime = Number(state.player.getCurrentTime());
       const duration = Number(state.player.getDuration());
@@ -443,7 +492,15 @@
         targetTime = Math.min(targetTime, duration);
       }
 
-      state.player.seekTo(targetTime, true);
+      if (seconds > 0 && targetTime - currentTime < 0.5) {
+        showToast("すでに取得可能な最新地点付近です。", "info");
+        return;
+      }
+
+      seekWithRetry(targetTime, {
+        requestId,
+        failureMessage: "再生位置を移動できませんでした。DVR範囲を確認してください。",
+      });
       showToast(`${formatPlaybackTime(targetTime)} へ移動しました。`, "success");
     } catch (error) {
       console.error("Relative seek failed:", error);
@@ -456,16 +513,37 @@
       return;
     }
 
+    const requestId = ++state.seekRequestId;
+    trySeekToLiveEdge(requestId, 1);
+  }
+
+  function trySeekToLiveEdge(requestId, attempt) {
+    if (requestId !== state.seekRequestId || !state.playerReady || !state.player) {
+      return;
+    }
+
     try {
       const duration = Number(state.player.getDuration());
       if (!Number.isFinite(duration) || duration <= 0) {
+        if (attempt < LIVE_EDGE_MAX_ATTEMPTS) {
+          window.setTimeout(
+            () => trySeekToLiveEdge(requestId, attempt + 1),
+            LIVE_EDGE_RETRY_DELAY_MS,
+          );
+          return;
+        }
         showToast("ライブの最新地点を取得できません。DVR設定を確認してください。", "error");
         return;
       }
 
       const targetTime = Math.max(0, duration - 0.5);
-      state.player.seekTo(targetTime, true);
-      state.player.playVideo();
+      seekWithRetry(targetTime, {
+        requestId,
+        playAfterSeek: true,
+        tolerance: 5,
+        failureMessage:
+          "ライブ地点へ移動できなかった可能性があります。DVR設定を確認してください。",
+      });
       showToast("取得可能なライブの最新地点へ移動しました。", "success");
     } catch (error) {
       console.error("Live edge seek failed:", error);
@@ -478,6 +556,7 @@
       return;
     }
 
+    state.seekRequestId += 1;
     try {
       const playerState = state.player.getPlayerState();
       const youtubePlayerState = window.YT && window.YT.PlayerState;
@@ -1058,14 +1137,29 @@
       return;
     }
 
+    const isAltOnly =
+      event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
+    if (isAltOnly && event.code === "KeyL") {
+      event.preventDefault();
+      seekToLiveEdge();
+      return;
+    }
+    if (isAltOnly && event.key === "ArrowLeft") {
+      event.preventDefault();
+      movePlaybackBy(-5);
+      return;
+    }
+    if (isAltOnly && event.key === "ArrowRight") {
+      event.preventDefault();
+      movePlaybackBy(5);
+      return;
+    }
+
     if (isTextEntryTarget(event.target)) {
       return;
     }
 
-    if (event.altKey && event.code === "KeyL") {
-      event.preventDefault();
-      seekToLiveEdge();
-    } else if (
+    if (
       event.key === "Enter" &&
       !event.altKey &&
       !event.ctrlKey &&
@@ -1075,24 +1169,6 @@
     ) {
       event.preventDefault();
       togglePlayback();
-    } else if (
-      event.key === "ArrowLeft" &&
-      event.altKey &&
-      !event.ctrlKey &&
-      !event.metaKey &&
-      !event.shiftKey
-    ) {
-      event.preventDefault();
-      movePlaybackBy(-5);
-    } else if (
-      event.key === "ArrowRight" &&
-      event.altKey &&
-      !event.ctrlKey &&
-      !event.metaKey &&
-      !event.shiftKey
-    ) {
-      event.preventDefault();
-      movePlaybackBy(5);
     }
   }
 
