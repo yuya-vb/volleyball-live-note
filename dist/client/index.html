@@ -15,14 +15,8 @@
 
     <main class="workspace">
       <h1 class="visually-hidden">YouTubeライブ分析メモ</h1>
-      <section class="player-column" aria-labelledby="player-heading">
-        <div class="section-heading">
-          <div>
-            <p class="section-kicker">MONITOR</p>
-            <h2 id="player-heading">ライブ映像</h2>
-          </div>
-          <span id="active-video-label" class="video-id-label">未選択</span>
-        </div>
+      <section class="player-column" aria-label="ライブ映像とローテーション">
+        <span id="active-video-label" class="visually-hidden">未選択</span>
 
         <div class="player-frame">
           <div id="youtube-player">
@@ -38,12 +32,12 @@
           <button id="rewind-button" class="control-button" type="button">
             <span aria-hidden="true">−5</span>
             5秒戻る
-            <kbd>←</kbd>
+            <kbd>Alt ←</kbd>
           </button>
           <button id="forward-button" class="control-button" type="button">
             <span aria-hidden="true">+5</span>
             5秒進む
-            <kbd>→</kbd>
+            <kbd>Alt →</kbd>
           </button>
           <button id="live-edge-button" class="control-button live-button" type="button">
             <span class="live-dot" aria-hidden="true"></span>
@@ -51,6 +45,117 @@
             <kbd>Alt L</kbd>
           </button>
         </div>
+
+        <section id="rotation-panel" class="rotation-panel" aria-labelledby="rotation-heading">
+          <div class="rotation-panel-header">
+            <div class="rotation-title-group">
+              <h2 id="rotation-heading">ローテーション</h2>
+              <span id="rotation-video-hint">動画を読み込むと保存されます</span>
+            </div>
+            <div class="rotation-panel-actions">
+              <button
+                id="rotation-toggle-button"
+                class="rotation-header-button"
+                type="button"
+                aria-expanded="true"
+                aria-controls="rotation-content"
+              >
+                折りたたむ
+              </button>
+              <button id="rotation-reset-button" class="rotation-header-button reset" type="button">
+                初期化
+              </button>
+            </div>
+          </div>
+
+          <div id="rotation-content" class="rotation-content">
+            <article class="rotation-team away-team" data-rotation-team="away">
+              <div class="rotation-team-header">
+                <strong>相手チーム</strong>
+                <span id="away-rotation-label" class="rotation-number">R1</span>
+              </div>
+              <div class="rotation-court" aria-label="相手チームのローテーション配置">
+                <div class="rotation-slot" data-position="5">
+                  <label for="away-p5">P5</label>
+                  <input id="away-p5" data-team="away" data-position="5" inputmode="numeric" pattern="[0-9]*" maxlength="2" placeholder="番号" autocomplete="off" />
+                  <button class="setter-button" type="button" data-team="away" data-position="5" aria-label="相手チーム P5をセッターに指定" aria-pressed="false">S</button>
+                </div>
+                <div class="rotation-slot" data-position="4">
+                  <label for="away-p4">P4</label>
+                  <input id="away-p4" data-team="away" data-position="4" inputmode="numeric" pattern="[0-9]*" maxlength="2" placeholder="番号" autocomplete="off" />
+                  <button class="setter-button" type="button" data-team="away" data-position="4" aria-label="相手チーム P4をセッターに指定" aria-pressed="false">S</button>
+                </div>
+                <div class="rotation-slot" data-position="6">
+                  <label for="away-p6">P6</label>
+                  <input id="away-p6" data-team="away" data-position="6" inputmode="numeric" pattern="[0-9]*" maxlength="2" placeholder="番号" autocomplete="off" />
+                  <button class="setter-button" type="button" data-team="away" data-position="6" aria-label="相手チーム P6をセッターに指定" aria-pressed="false">S</button>
+                </div>
+                <div class="rotation-slot" data-position="3">
+                  <label for="away-p3">P3</label>
+                  <input id="away-p3" data-team="away" data-position="3" inputmode="numeric" pattern="[0-9]*" maxlength="2" placeholder="番号" autocomplete="off" />
+                  <button class="setter-button" type="button" data-team="away" data-position="3" aria-label="相手チーム P3をセッターに指定" aria-pressed="false">S</button>
+                </div>
+                <div class="rotation-slot" data-position="1">
+                  <label for="away-p1">P1</label>
+                  <input id="away-p1" data-team="away" data-position="1" inputmode="numeric" pattern="[0-9]*" maxlength="2" placeholder="番号" autocomplete="off" />
+                  <button class="setter-button" type="button" data-team="away" data-position="1" aria-label="相手チーム P1をセッターに指定" aria-pressed="false">S</button>
+                </div>
+                <div class="rotation-slot" data-position="2">
+                  <label for="away-p2">P2</label>
+                  <input id="away-p2" data-team="away" data-position="2" inputmode="numeric" pattern="[0-9]*" maxlength="2" placeholder="番号" autocomplete="off" />
+                  <button class="setter-button" type="button" data-team="away" data-position="2" aria-label="相手チーム P2をセッターに指定" aria-pressed="false">S</button>
+                </div>
+              </div>
+              <div class="rotation-controls">
+                <button type="button" data-team="away" data-direction="previous">← 1つ戻す</button>
+                <button type="button" data-team="away" data-direction="next">1つ回す →</button>
+              </div>
+            </article>
+
+            <article class="rotation-team home-team" data-rotation-team="home">
+              <div class="rotation-team-header">
+                <strong>自チーム</strong>
+                <span id="home-rotation-label" class="rotation-number">R1</span>
+              </div>
+              <div class="rotation-court" aria-label="自チームのローテーション配置">
+                <div class="rotation-slot" data-position="2">
+                  <label for="home-p2">P2</label>
+                  <input id="home-p2" data-team="home" data-position="2" inputmode="numeric" pattern="[0-9]*" maxlength="2" placeholder="番号" autocomplete="off" />
+                  <button class="setter-button" type="button" data-team="home" data-position="2" aria-label="自チーム P2をセッターに指定" aria-pressed="false">S</button>
+                </div>
+                <div class="rotation-slot" data-position="1">
+                  <label for="home-p1">P1</label>
+                  <input id="home-p1" data-team="home" data-position="1" inputmode="numeric" pattern="[0-9]*" maxlength="2" placeholder="番号" autocomplete="off" />
+                  <button class="setter-button" type="button" data-team="home" data-position="1" aria-label="自チーム P1をセッターに指定" aria-pressed="false">S</button>
+                </div>
+                <div class="rotation-slot" data-position="3">
+                  <label for="home-p3">P3</label>
+                  <input id="home-p3" data-team="home" data-position="3" inputmode="numeric" pattern="[0-9]*" maxlength="2" placeholder="番号" autocomplete="off" />
+                  <button class="setter-button" type="button" data-team="home" data-position="3" aria-label="自チーム P3をセッターに指定" aria-pressed="false">S</button>
+                </div>
+                <div class="rotation-slot" data-position="6">
+                  <label for="home-p6">P6</label>
+                  <input id="home-p6" data-team="home" data-position="6" inputmode="numeric" pattern="[0-9]*" maxlength="2" placeholder="番号" autocomplete="off" />
+                  <button class="setter-button" type="button" data-team="home" data-position="6" aria-label="自チーム P6をセッターに指定" aria-pressed="false">S</button>
+                </div>
+                <div class="rotation-slot" data-position="4">
+                  <label for="home-p4">P4</label>
+                  <input id="home-p4" data-team="home" data-position="4" inputmode="numeric" pattern="[0-9]*" maxlength="2" placeholder="番号" autocomplete="off" />
+                  <button class="setter-button" type="button" data-team="home" data-position="4" aria-label="自チーム P4をセッターに指定" aria-pressed="false">S</button>
+                </div>
+                <div class="rotation-slot" data-position="5">
+                  <label for="home-p5">P5</label>
+                  <input id="home-p5" data-team="home" data-position="5" inputmode="numeric" pattern="[0-9]*" maxlength="2" placeholder="番号" autocomplete="off" />
+                  <button class="setter-button" type="button" data-team="home" data-position="5" aria-label="自チーム P5をセッターに指定" aria-pressed="false">S</button>
+                </div>
+              </div>
+              <div class="rotation-controls">
+                <button type="button" data-team="home" data-direction="previous">← 1つ戻す</button>
+                <button type="button" data-team="home" data-direction="next">1つ回す →</button>
+              </div>
+            </article>
+          </div>
+        </section>
 
         <div id="player-status" class="player-status" role="status" aria-live="polite">
           <span class="status-indicator" aria-hidden="true"></span>
@@ -65,7 +170,7 @@
           <span><kbd>Ctrl</kbd> + <kbd>Enter</kbd> メモ保存</span>
           <span><kbd>Enter</kbd> 再生 / 一時停止</span>
           <span><kbd>Alt</kbd> + <kbd>L</kbd> ライブ地点</span>
-          <span><kbd>← / →</kbd> 5秒移動</span>
+          <span><kbd>Alt</kbd> + <kbd>← / →</kbd> 5秒移動</span>
         </aside>
       </section>
 

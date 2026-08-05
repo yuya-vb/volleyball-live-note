@@ -7,7 +7,7 @@
   const ROTATION_STORAGE_VERSION = 1;
   const ROTATION_TEAMS = ["home", "away"];
   const ROTATION_POSITIONS = [1, 2, 3, 4, 5, 6];
-  const ROTATION_INPUT_MAX_LENGTH = 12;
+  const ROTATION_INPUT_MAX_LENGTH = 2;
   const VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
   const API_LOAD_TIMEOUT_MS = 15000;
   const SEEK_VERIFY_DELAY_MS = 1100;
@@ -84,6 +84,9 @@
     elements.rotationInputs = Array.from(
       document.querySelectorAll(".rotation-slot input[data-team][data-position]"),
     );
+    elements.setterButtons = Array.from(
+      document.querySelectorAll(".setter-button[data-team][data-position]"),
+    );
     elements.rotationControlButtons = Array.from(
       document.querySelectorAll(".rotation-controls button[data-team][data-direction]"),
     );
@@ -109,6 +112,9 @@
     elements.liveEdgeButton.addEventListener("click", seekToLiveEdge);
     elements.rotationInputs.forEach((input) => {
       input.addEventListener("input", handleRotationInput);
+    });
+    elements.setterButtons.forEach((button) => {
+      button.addEventListener("click", handleSetterSelection);
     });
     elements.rotationControlButtons.forEach((button) => {
       button.addEventListener("click", handleRotationControl);
@@ -631,6 +637,7 @@
     return {
       rotation: 1,
       players,
+      setterPosition: null,
     };
   }
 
@@ -699,12 +706,19 @@
     const sanitizedTeam = createEmptyTeamRotation();
     sanitizedTeam.rotation = teamRotation.rotation;
     ROTATION_POSITIONS.forEach((position) => {
-      const playerName = teamRotation.players[position];
-      if (typeof playerName === "string") {
-        sanitizedTeam.players[position] = playerName.slice(0, ROTATION_INPUT_MAX_LENGTH);
+      const playerNumber = teamRotation.players[position];
+      if (typeof playerNumber === "string") {
+        sanitizedTeam.players[position] = sanitizePlayerNumber(playerNumber);
       }
     });
+    if (ROTATION_POSITIONS.includes(teamRotation.setterPosition)) {
+      sanitizedTeam.setterPosition = teamRotation.setterPosition;
+    }
     return sanitizedTeam;
+  }
+
+  function sanitizePlayerNumber(value) {
+    return String(value).replace(/\D/g, "").slice(0, ROTATION_INPUT_MAX_LENGTH);
   }
 
   function getCurrentVideoRotation(createIfMissing = false) {
@@ -758,6 +772,23 @@
     elements.rotationControlButtons.forEach((button) => {
       button.disabled = !hasVideo;
     });
+    elements.setterButtons.forEach((button) => {
+      const team = button.dataset.team;
+      const position = Number(button.dataset.position);
+      const isSetter =
+        ROTATION_TEAMS.includes(team) &&
+        ROTATION_POSITIONS.includes(position) &&
+        displayRotation[team].setterPosition === position;
+      const teamLabel = team === "home" ? "自チーム" : "相手チーム";
+
+      button.disabled = !hasVideo;
+      button.setAttribute("aria-pressed", String(isSetter));
+      button.setAttribute(
+        "aria-label",
+        `${teamLabel} P${position}のセッター指定を${isSetter ? "解除" : "設定"}`,
+      );
+      button.closest(".rotation-slot")?.classList.toggle("is-setter", isSetter);
+    });
     elements.rotationResetButton.disabled = !videoRotation;
   }
 
@@ -774,11 +805,31 @@
     }
 
     const videoRotation = getCurrentVideoRotation(true);
-    const playerName = input.value.slice(0, ROTATION_INPUT_MAX_LENGTH);
-    input.value = playerName;
-    videoRotation[team].players[position] = playerName;
+    const playerNumber = sanitizePlayerNumber(input.value);
+    input.value = playerNumber;
+    videoRotation[team].players[position] = playerNumber;
     elements.rotationResetButton.disabled = false;
     persistRotationData();
+  }
+
+  function handleSetterSelection(event) {
+    const button = event.currentTarget;
+    const team = button.dataset.team;
+    const position = Number(button.dataset.position);
+    if (
+      !ROTATION_TEAMS.includes(team) ||
+      !ROTATION_POSITIONS.includes(position) ||
+      !state.activeVideoId
+    ) {
+      return;
+    }
+
+    const videoRotation = getCurrentVideoRotation(true);
+    videoRotation[team].setterPosition =
+      videoRotation[team].setterPosition === position ? null : position;
+    elements.rotationResetButton.disabled = false;
+    persistRotationData();
+    renderRotationBoard();
   }
 
   function handleRotationControl(event) {
@@ -796,6 +847,7 @@
     const videoRotation = getCurrentVideoRotation(true);
     const teamRotation = videoRotation[team];
     const previousPlayers = { ...teamRotation.players };
+    const previousSetterPosition = teamRotation.setterPosition;
     ROTATION_POSITIONS.forEach((position) => {
       const sourcePosition =
         direction === "next"
@@ -811,6 +863,16 @@
       direction === "next"
         ? (teamRotation.rotation % 6) + 1
         : ((teamRotation.rotation + 4) % 6) + 1;
+    if (ROTATION_POSITIONS.includes(previousSetterPosition)) {
+      teamRotation.setterPosition =
+        direction === "next"
+          ? previousSetterPosition === 1
+            ? 6
+            : previousSetterPosition - 1
+          : previousSetterPosition === 6
+            ? 1
+            : previousSetterPosition + 1;
+    }
 
     persistRotationData();
     renderRotationBoard();

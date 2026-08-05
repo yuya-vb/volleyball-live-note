@@ -3,9 +3,18 @@
 
   const STORAGE_KEY = "youtubeLiveMemoApp.v1";
   const STORAGE_VERSION = 1;
+  const ROTATION_STORAGE_KEY = "youtubeLiveRotationTracker.v1";
+  const ROTATION_STORAGE_VERSION = 1;
+  const ROTATION_TEAMS = ["home", "away"];
+  const ROTATION_POSITIONS = [1, 2, 3, 4, 5, 6];
+  const ROTATION_INPUT_MAX_LENGTH = 2;
   const VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
   const API_LOAD_TIMEOUT_MS = 15000;
   const SEEK_VERIFY_DELAY_MS = 1100;
+  const SEEK_TOLERANCE_SECONDS = 3.5;
+  const SEEK_MAX_ATTEMPTS = 2;
+  const LIVE_EDGE_RETRY_DELAY_MS = 400;
+  const LIVE_EDGE_MAX_ATTEMPTS = 5;
   const TOAST_DURATION_MS = 4200;
   const SHARED_API_BASE =
     window.location.hostname.endsWith(".pages.dev")
@@ -21,8 +30,10 @@
     loadedVideoId: "",
     editingMemoId: "",
     apiTimeoutId: null,
+    seekRequestId: 0,
     sharedMode: false,
     data: createEmptyData(),
+    rotationData: createEmptyRotationData(),
   };
 
   const elements = {};
@@ -33,7 +44,9 @@
     cacheElements();
     bindEvents();
     state.data = loadStoredData();
+    state.rotationData = loadRotationData();
     renderMemoList();
+    renderRotationBoard();
     updateMemoCharacterCount();
     updateDataActionButtons();
     loadYouTubeApi();
@@ -60,6 +73,23 @@
     elements.playerStatusTitle = document.getElementById("player-status-title");
     elements.playerStatusDetail = document.getElementById("player-status-detail");
     elements.activeVideoLabel = document.getElementById("active-video-label");
+    elements.playerColumn = document.querySelector(".player-column");
+    elements.rotationPanel = document.getElementById("rotation-panel");
+    elements.rotationContent = document.getElementById("rotation-content");
+    elements.rotationVideoHint = document.getElementById("rotation-video-hint");
+    elements.rotationToggleButton = document.getElementById("rotation-toggle-button");
+    elements.rotationResetButton = document.getElementById("rotation-reset-button");
+    elements.homeRotationLabel = document.getElementById("home-rotation-label");
+    elements.awayRotationLabel = document.getElementById("away-rotation-label");
+    elements.rotationInputs = Array.from(
+      document.querySelectorAll(".rotation-slot input[data-team][data-position]"),
+    );
+    elements.setterButtons = Array.from(
+      document.querySelectorAll(".setter-button[data-team][data-position]"),
+    );
+    elements.rotationControlButtons = Array.from(
+      document.querySelectorAll(".rotation-controls button[data-team][data-direction]"),
+    );
     elements.toastRegion = document.getElementById("toast-region");
   }
 
@@ -80,6 +110,17 @@
     elements.rewindButton.addEventListener("click", () => movePlaybackBy(-5));
     elements.forwardButton.addEventListener("click", () => movePlaybackBy(5));
     elements.liveEdgeButton.addEventListener("click", seekToLiveEdge);
+    elements.rotationInputs.forEach((input) => {
+      input.addEventListener("input", handleRotationInput);
+    });
+    elements.setterButtons.forEach((button) => {
+      button.addEventListener("click", handleSetterSelection);
+    });
+    elements.rotationControlButtons.forEach((button) => {
+      button.addEventListener("click", handleRotationControl);
+    });
+    elements.rotationToggleButton.addEventListener("click", toggleRotationPanel);
+    elements.rotationResetButton.addEventListener("click", resetCurrentRotation);
     document.addEventListener("keydown", handleKeyboardShortcuts);
   }
 
@@ -180,11 +221,13 @@
       return;
     }
 
+    state.seekRequestId += 1;
     state.activeVideoId = videoId;
     state.pendingVideoId = videoId;
     state.editingMemoId = "";
     elements.activeVideoLabel.textContent = `VIDEO ${videoId}`;
     renderMemoList();
+    renderRotationBoard();
     updateDataActionButtons();
     if (state.sharedMode) {
       loadSharedMemos(videoId);
@@ -396,32 +439,74 @@
     }
 
     try {
-      state.player.seekTo(memo.time, true);
-      state.player.playVideo();
+      seekWithRetry(memo.time, {
+        playAfterSeek: true,
+        failureMessage:
+          "指定位置へ移動できなかった可能性があります。ライブのDVR範囲を確認してください。",
+      });
       showToast(`${formatPlaybackTime(memo.time)} へ移動しました。`, "success");
-      verifySeekPosition(memo.time);
     } catch (error) {
       console.error("Seek failed:", error);
       showToast("指定位置へ移動できません。DVRが有効か確認してください。", "error");
     }
   }
 
-  function verifySeekPosition(targetTime) {
+  function seekWithRetry(targetTime, options = {}) {
+    const requestId = options.requestId ?? ++state.seekRequestId;
+    const tolerance = options.tolerance ?? SEEK_TOLERANCE_SECONDS;
+    const failureMessage =
+      options.failureMessage || "再生位置を移動できなかった可能性があります。";
+
+    issueSeek(targetTime, options.playAfterSeek === true);
+    verifySeekPosition(targetTime, requestId, 1, {
+      failureMessage,
+      playAfterSeek: options.playAfterSeek === true,
+      tolerance,
+    });
+  }
+
+  function issueSeek(targetTime, playAfterSeek) {
+    state.player.seekTo(targetTime, true);
+    if (playAfterSeek) {
+      state.player.playVideo();
+    }
+  }
+
+  function verifySeekPosition(targetTime, requestId, attempt, options) {
     window.setTimeout(() => {
-      if (!state.playerReady || !state.player) {
+      if (requestId !== state.seekRequestId || !state.playerReady || !state.player) {
         return;
       }
 
       try {
         const actualTime = Number(state.player.getCurrentTime());
-        if (Number.isFinite(actualTime) && Math.abs(actualTime - targetTime) > 8) {
-          showToast(
-            "指定位置へ移動できなかった可能性があります。ライブのDVR範囲を確認してください。",
-            "warning",
-          );
+        const reachedTarget =
+          Number.isFinite(actualTime) &&
+          Math.abs(actualTime - targetTime) <= options.tolerance;
+        if (reachedTarget) {
+          return;
         }
+
+        if (attempt < SEEK_MAX_ATTEMPTS) {
+          issueSeek(targetTime, options.playAfterSeek);
+          verifySeekPosition(targetTime, requestId, attempt + 1, options);
+          return;
+        }
+
+        showToast(options.failureMessage, "warning");
       } catch (error) {
         console.warn("Seek verification failed:", error);
+        if (attempt < SEEK_MAX_ATTEMPTS) {
+          try {
+            issueSeek(targetTime, options.playAfterSeek);
+            verifySeekPosition(targetTime, requestId, attempt + 1, options);
+          } catch (retryError) {
+            console.warn("Seek retry failed:", retryError);
+            showToast(options.failureMessage, "warning");
+          }
+        } else {
+          showToast(options.failureMessage, "warning");
+        }
       }
     }, SEEK_VERIFY_DELAY_MS);
   }
@@ -431,6 +516,7 @@
       return;
     }
 
+    const requestId = ++state.seekRequestId;
     try {
       const currentTime = Number(state.player.getCurrentTime());
       const duration = Number(state.player.getDuration());
@@ -443,7 +529,15 @@
         targetTime = Math.min(targetTime, duration);
       }
 
-      state.player.seekTo(targetTime, true);
+      if (seconds > 0 && targetTime - currentTime < 0.5) {
+        showToast("すでに取得可能な最新地点付近です。", "info");
+        return;
+      }
+
+      seekWithRetry(targetTime, {
+        requestId,
+        failureMessage: "再生位置を移動できませんでした。DVR範囲を確認してください。",
+      });
       showToast(`${formatPlaybackTime(targetTime)} へ移動しました。`, "success");
     } catch (error) {
       console.error("Relative seek failed:", error);
@@ -456,16 +550,37 @@
       return;
     }
 
+    const requestId = ++state.seekRequestId;
+    trySeekToLiveEdge(requestId, 1);
+  }
+
+  function trySeekToLiveEdge(requestId, attempt) {
+    if (requestId !== state.seekRequestId || !state.playerReady || !state.player) {
+      return;
+    }
+
     try {
       const duration = Number(state.player.getDuration());
       if (!Number.isFinite(duration) || duration <= 0) {
+        if (attempt < LIVE_EDGE_MAX_ATTEMPTS) {
+          window.setTimeout(
+            () => trySeekToLiveEdge(requestId, attempt + 1),
+            LIVE_EDGE_RETRY_DELAY_MS,
+          );
+          return;
+        }
         showToast("ライブの最新地点を取得できません。DVR設定を確認してください。", "error");
         return;
       }
 
       const targetTime = Math.max(0, duration - 0.5);
-      state.player.seekTo(targetTime, true);
-      state.player.playVideo();
+      seekWithRetry(targetTime, {
+        requestId,
+        playAfterSeek: true,
+        tolerance: 5,
+        failureMessage:
+          "ライブ地点へ移動できなかった可能性があります。DVR設定を確認してください。",
+      });
       showToast("取得可能なライブの最新地点へ移動しました。", "success");
     } catch (error) {
       console.error("Live edge seek failed:", error);
@@ -478,6 +593,7 @@
       return;
     }
 
+    state.seekRequestId += 1;
     try {
       const playerState = state.player.getPlayerState();
       const youtubePlayerState = window.YT && window.YT.PlayerState;
@@ -504,6 +620,289 @@
       return false;
     }
     return true;
+  }
+
+  function createEmptyRotationData() {
+    return {
+      version: ROTATION_STORAGE_VERSION,
+      videos: Object.create(null),
+    };
+  }
+
+  function createEmptyTeamRotation() {
+    const players = Object.create(null);
+    ROTATION_POSITIONS.forEach((position) => {
+      players[position] = "";
+    });
+    return {
+      rotation: 1,
+      players,
+      setterPosition: null,
+    };
+  }
+
+  function createEmptyVideoRotation() {
+    return {
+      home: createEmptyTeamRotation(),
+      away: createEmptyTeamRotation(),
+    };
+  }
+
+  function loadRotationData() {
+    try {
+      const serializedData = localStorage.getItem(ROTATION_STORAGE_KEY);
+      if (!serializedData) {
+        return createEmptyRotationData();
+      }
+
+      const parsedData = JSON.parse(serializedData);
+      if (
+        !isPlainObject(parsedData) ||
+        parsedData.version !== ROTATION_STORAGE_VERSION ||
+        !isPlainObject(parsedData.videos)
+      ) {
+        showToast("ローテーション保存データの形式が不正なため、無視しました。", "warning");
+        return createEmptyRotationData();
+      }
+
+      const validData = createEmptyRotationData();
+      Object.entries(parsedData.videos).forEach(([videoId, videoRotation]) => {
+        if (!VIDEO_ID_PATTERN.test(videoId) || !isPlainObject(videoRotation)) {
+          return;
+        }
+
+        const sanitizedVideoRotation = createEmptyVideoRotation();
+        let hasValidTeam = false;
+        ROTATION_TEAMS.forEach((team) => {
+          const sanitizedTeam = sanitizeTeamRotation(videoRotation[team]);
+          if (sanitizedTeam) {
+            sanitizedVideoRotation[team] = sanitizedTeam;
+            hasValidTeam = true;
+          }
+        });
+        if (hasValidTeam) {
+          validData.videos[videoId] = sanitizedVideoRotation;
+        }
+      });
+      return validData;
+    } catch (error) {
+      console.error("Rotation localStorage read failed:", error);
+      showToast("ローテーションの保存データを読み込めませんでした。", "error");
+      return createEmptyRotationData();
+    }
+  }
+
+  function sanitizeTeamRotation(teamRotation) {
+    if (
+      !isPlainObject(teamRotation) ||
+      !Number.isInteger(teamRotation.rotation) ||
+      teamRotation.rotation < 1 ||
+      teamRotation.rotation > 6 ||
+      !isPlainObject(teamRotation.players)
+    ) {
+      return null;
+    }
+
+    const sanitizedTeam = createEmptyTeamRotation();
+    sanitizedTeam.rotation = teamRotation.rotation;
+    ROTATION_POSITIONS.forEach((position) => {
+      const playerNumber = teamRotation.players[position];
+      if (typeof playerNumber === "string") {
+        sanitizedTeam.players[position] = sanitizePlayerNumber(playerNumber);
+      }
+    });
+    if (ROTATION_POSITIONS.includes(teamRotation.setterPosition)) {
+      sanitizedTeam.setterPosition = teamRotation.setterPosition;
+    }
+    return sanitizedTeam;
+  }
+
+  function sanitizePlayerNumber(value) {
+    return String(value).replace(/\D/g, "").slice(0, ROTATION_INPUT_MAX_LENGTH);
+  }
+
+  function getCurrentVideoRotation(createIfMissing = false) {
+    if (!state.activeVideoId || !VIDEO_ID_PATTERN.test(state.activeVideoId)) {
+      return null;
+    }
+
+    let videoRotation = state.rotationData.videos[state.activeVideoId];
+    if (!videoRotation && createIfMissing) {
+      videoRotation = createEmptyVideoRotation();
+      state.rotationData.videos[state.activeVideoId] = videoRotation;
+    }
+    return videoRotation || null;
+  }
+
+  function persistRotationData() {
+    try {
+      localStorage.setItem(ROTATION_STORAGE_KEY, JSON.stringify(state.rotationData));
+      return true;
+    } catch (error) {
+      console.error("Rotation localStorage write failed:", error);
+      showToast("ローテーションを保存できませんでした。", "error");
+      return false;
+    }
+  }
+
+  function renderRotationBoard() {
+    const hasVideo = Boolean(
+      state.activeVideoId && VIDEO_ID_PATTERN.test(state.activeVideoId),
+    );
+    const videoRotation = hasVideo ? getCurrentVideoRotation(false) : null;
+    const displayRotation = videoRotation || createEmptyVideoRotation();
+
+    elements.rotationPanel.classList.toggle("is-disabled", !hasVideo);
+    elements.rotationVideoHint.classList.toggle("is-warning", !hasVideo);
+    elements.rotationVideoHint.textContent = hasVideo
+      ? `VIDEO ${state.activeVideoId} に端末保存`
+      : "動画を読み込むと保存されます";
+    elements.homeRotationLabel.textContent = `R${displayRotation.home.rotation}`;
+    elements.awayRotationLabel.textContent = `R${displayRotation.away.rotation}`;
+
+    elements.rotationInputs.forEach((input) => {
+      const team = input.dataset.team;
+      const position = Number(input.dataset.position);
+      input.disabled = !hasVideo;
+      input.value =
+        ROTATION_TEAMS.includes(team) && ROTATION_POSITIONS.includes(position)
+          ? displayRotation[team].players[position]
+          : "";
+    });
+    elements.rotationControlButtons.forEach((button) => {
+      button.disabled = !hasVideo;
+    });
+    elements.setterButtons.forEach((button) => {
+      const team = button.dataset.team;
+      const position = Number(button.dataset.position);
+      const isSetter =
+        ROTATION_TEAMS.includes(team) &&
+        ROTATION_POSITIONS.includes(position) &&
+        displayRotation[team].setterPosition === position;
+      const teamLabel = team === "home" ? "自チーム" : "相手チーム";
+
+      button.disabled = !hasVideo;
+      button.setAttribute("aria-pressed", String(isSetter));
+      button.setAttribute(
+        "aria-label",
+        `${teamLabel} P${position}のセッター指定を${isSetter ? "解除" : "設定"}`,
+      );
+      button.closest(".rotation-slot")?.classList.toggle("is-setter", isSetter);
+    });
+    elements.rotationResetButton.disabled = !videoRotation;
+  }
+
+  function handleRotationInput(event) {
+    const input = event.currentTarget;
+    const team = input.dataset.team;
+    const position = Number(input.dataset.position);
+    if (
+      !ROTATION_TEAMS.includes(team) ||
+      !ROTATION_POSITIONS.includes(position) ||
+      !state.activeVideoId
+    ) {
+      return;
+    }
+
+    const videoRotation = getCurrentVideoRotation(true);
+    const playerNumber = sanitizePlayerNumber(input.value);
+    input.value = playerNumber;
+    videoRotation[team].players[position] = playerNumber;
+    elements.rotationResetButton.disabled = false;
+    persistRotationData();
+  }
+
+  function handleSetterSelection(event) {
+    const button = event.currentTarget;
+    const team = button.dataset.team;
+    const position = Number(button.dataset.position);
+    if (
+      !ROTATION_TEAMS.includes(team) ||
+      !ROTATION_POSITIONS.includes(position) ||
+      !state.activeVideoId
+    ) {
+      return;
+    }
+
+    const videoRotation = getCurrentVideoRotation(true);
+    videoRotation[team].setterPosition =
+      videoRotation[team].setterPosition === position ? null : position;
+    elements.rotationResetButton.disabled = false;
+    persistRotationData();
+    renderRotationBoard();
+  }
+
+  function handleRotationControl(event) {
+    const button = event.currentTarget;
+    const team = button.dataset.team;
+    const direction = button.dataset.direction;
+    if (
+      !ROTATION_TEAMS.includes(team) ||
+      !["next", "previous"].includes(direction) ||
+      !state.activeVideoId
+    ) {
+      return;
+    }
+
+    const videoRotation = getCurrentVideoRotation(true);
+    const teamRotation = videoRotation[team];
+    const previousPlayers = { ...teamRotation.players };
+    const previousSetterPosition = teamRotation.setterPosition;
+    ROTATION_POSITIONS.forEach((position) => {
+      const sourcePosition =
+        direction === "next"
+          ? position === 6
+            ? 1
+            : position + 1
+          : position === 1
+            ? 6
+            : position - 1;
+      teamRotation.players[position] = previousPlayers[sourcePosition] || "";
+    });
+    teamRotation.rotation =
+      direction === "next"
+        ? (teamRotation.rotation % 6) + 1
+        : ((teamRotation.rotation + 4) % 6) + 1;
+    if (ROTATION_POSITIONS.includes(previousSetterPosition)) {
+      teamRotation.setterPosition =
+        direction === "next"
+          ? previousSetterPosition === 1
+            ? 6
+            : previousSetterPosition - 1
+          : previousSetterPosition === 6
+            ? 1
+            : previousSetterPosition + 1;
+    }
+
+    persistRotationData();
+    renderRotationBoard();
+  }
+
+  function resetCurrentRotation() {
+    if (!state.activeVideoId || !getCurrentVideoRotation(false)) {
+      return;
+    }
+    const confirmed = window.confirm(
+      "この動画の自チーム・相手チームのローテーションを初期化しますか？",
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    delete state.rotationData.videos[state.activeVideoId];
+    if (persistRotationData()) {
+      renderRotationBoard();
+      showToast("ローテーションを初期化しました。", "success");
+    }
+  }
+
+  function toggleRotationPanel() {
+    const shouldCollapse = !elements.rotationContent.hidden;
+    elements.rotationContent.hidden = shouldCollapse;
+    elements.rotationPanel.classList.toggle("is-collapsed", shouldCollapse);
+    elements.playerColumn.classList.toggle("rotation-collapsed", shouldCollapse);
+    elements.rotationToggleButton.setAttribute("aria-expanded", String(!shouldCollapse));
+    elements.rotationToggleButton.textContent = shouldCollapse ? "表示する" : "折りたたむ";
   }
 
   function renderMemoList() {
@@ -1058,14 +1457,29 @@
       return;
     }
 
+    const isAltOnly =
+      event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
+    if (isAltOnly && event.code === "KeyL") {
+      event.preventDefault();
+      seekToLiveEdge();
+      return;
+    }
+    if (isAltOnly && event.key === "ArrowLeft") {
+      event.preventDefault();
+      movePlaybackBy(-5);
+      return;
+    }
+    if (isAltOnly && event.key === "ArrowRight") {
+      event.preventDefault();
+      movePlaybackBy(5);
+      return;
+    }
+
     if (isTextEntryTarget(event.target)) {
       return;
     }
 
-    if (event.altKey && event.code === "KeyL") {
-      event.preventDefault();
-      seekToLiveEdge();
-    } else if (
+    if (
       event.key === "Enter" &&
       !event.altKey &&
       !event.ctrlKey &&
@@ -1075,22 +1489,6 @@
     ) {
       event.preventDefault();
       togglePlayback();
-    } else if (
-      event.key === "ArrowLeft" &&
-      !event.altKey &&
-      !event.ctrlKey &&
-      !event.metaKey
-    ) {
-      event.preventDefault();
-      movePlaybackBy(-5);
-    } else if (
-      event.key === "ArrowRight" &&
-      !event.altKey &&
-      !event.ctrlKey &&
-      !event.metaKey
-    ) {
-      event.preventDefault();
-      movePlaybackBy(5);
     }
   }
 
