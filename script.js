@@ -777,6 +777,7 @@
     const playerName = input.value.slice(0, ROTATION_INPUT_MAX_LENGTH);
     input.value = playerName;
     videoRotation[team].players[position] = playerName;
+    elements.rotationResetButton.disabled = false;
     persistRotationData();
   }
 
