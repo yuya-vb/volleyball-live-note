@@ -57,6 +57,10 @@
   function cacheElements() {
     elements.videoInput = document.getElementById("video-input");
     elements.loadVideoButton = document.getElementById("load-video-button");
+    elements.loadBlock = document.querySelector(".load-block");
+    elements.videoInputLabel = document.getElementById("video-input-label");
+    elements.videoInputContent = document.getElementById("video-input-content");
+    elements.videoInputToggleButton = document.getElementById("video-input-toggle-button");
     elements.memoText = document.getElementById("memo-text");
     elements.memoCharacterCount = document.getElementById("memo-character-count");
     elements.saveOffset = document.getElementById("save-offset");
@@ -100,6 +104,7 @@
 
   function bindEvents() {
     elements.loadVideoButton.addEventListener("click", handleVideoLoadRequest);
+    elements.videoInputToggleButton.addEventListener("click", toggleVideoInput);
     elements.videoInput.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.ctrlKey) {
         event.preventDefault();
@@ -247,6 +252,7 @@
     state.pendingVideoId = videoId;
     state.editingMemoId = "";
     elements.activeVideoLabel.textContent = `VIDEO ${videoId}`;
+    setVideoInputCollapsed(true);
     renderMemoList();
     renderRotationBoard();
     updateDataActionButtons();
@@ -303,6 +309,7 @@
       showToast(`動画 ${videoId} を読み込みました。`, "success");
     } catch (error) {
       console.error("Player load failed:", error);
+      setVideoInputCollapsed(false);
       setPlayerStatus("動画を読み込めません", "入力内容や通信状態を確認してください", "error");
       showToast("動画を読み込めませんでした。", "error");
     }
@@ -340,7 +347,7 @@
     } else if (event.data === playerState.PAUSED) {
       setPlayerStatus("一時停止中", "メモ保存時も現在の再生位置を記録できます", "ready");
     } else if (event.data === playerState.ENDED) {
-      setPlayerStatus("再生が終了しました", "ライブ地点ボタンで終端付近へ移動できます", "ready");
+      setPlayerStatus("再生が終了しました", "Alt + Lで終端付近へ移動できます", "ready");
     }
   }
 
@@ -353,8 +360,31 @@
       150: "動画の所有者により埋め込み再生が許可されていません。",
     };
     const message = messages[event.data] || "YouTube動画を読み込めませんでした。";
+    setVideoInputCollapsed(false);
     setPlayerStatus("動画を再生できません", message, "error");
     showToast(message, "error");
+  }
+
+  function toggleVideoInput() {
+    const isCollapsed = elements.loadBlock.classList.contains("is-collapsed");
+    setVideoInputCollapsed(!isCollapsed);
+    if (isCollapsed) {
+      window.requestAnimationFrame(() => elements.videoInput.focus());
+    }
+  }
+
+  function setVideoInputCollapsed(shouldCollapse) {
+    const canCollapse = Boolean(state.activeVideoId);
+    const isCollapsed = shouldCollapse && canCollapse;
+
+    elements.loadBlock.classList.toggle("is-collapsed", isCollapsed);
+    elements.videoInputContent.hidden = isCollapsed;
+    elements.videoInputToggleButton.hidden = !canCollapse;
+    elements.videoInputToggleButton.setAttribute("aria-expanded", String(!isCollapsed));
+    elements.videoInputToggleButton.textContent = isCollapsed ? "動画を変更" : "閉じる";
+    elements.videoInputLabel.textContent = isCollapsed
+      ? `VIDEO ${state.activeVideoId}`
+      : "YouTube URL / 動画ID";
   }
 
   function extractVideoId(rawInput) {

@@ -176,19 +176,33 @@
 
       <section class="control-column" aria-label="メモ入力とローテーション">
         <div class="control-block load-block">
-          <label for="video-input">YouTube URL / 動画ID</label>
-          <div class="input-action-row">
-            <input
-              id="video-input"
-              type="text"
-              inputmode="url"
-              autocomplete="off"
-              spellcheck="false"
-              placeholder="https://www.youtube.com/watch?v=..."
-            />
-            <button id="load-video-button" class="secondary-button" type="button">動画を読み込む</button>
+          <div class="load-block-header">
+            <label id="video-input-label" for="video-input">YouTube URL / 動画ID</label>
+            <button
+              id="video-input-toggle-button"
+              class="compact-toggle-button"
+              type="button"
+              aria-expanded="true"
+              aria-controls="video-input-content"
+              hidden
+            >
+              閉じる
+            </button>
           </div>
-          <p class="field-help">watch / youtu.be / live URL、または11文字の動画IDに対応</p>
+          <div id="video-input-content">
+            <div class="input-action-row">
+              <input
+                id="video-input"
+                type="text"
+                inputmode="url"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="https://www.youtube.com/watch?v=..."
+              />
+              <button id="load-video-button" class="secondary-button" type="button">動画を読み込む</button>
+            </div>
+            <p class="field-help">watch / youtu.be / live URL、または11文字の動画IDに対応</p>
+          </div>
         </div>
 
         <div class="control-block memo-compose">
@@ -198,7 +212,7 @@
           </div>
           <textarea
             id="memo-text"
-            rows="7"
+            rows="4"
             placeholder="例：タイムアウト後、相手のレフトがクロスを多用。ブロックの間隔をあとで確認する。"
           ></textarea>
 
