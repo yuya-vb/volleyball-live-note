@@ -1046,6 +1046,7 @@
 
   function createMemoEditArea(memo) {
     const wrapper = document.createElement("div");
+    wrapper.className = "memo-edit-area";
     const textarea = document.createElement("textarea");
     textarea.className = "memo-edit-textarea";
     textarea.value = memo.text;

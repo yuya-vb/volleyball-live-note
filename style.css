@@ -399,20 +399,12 @@ a:focus-visible {
 .rotation-content {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
 }
 
 .rotation-content::before {
-  position: absolute;
-  top: 2px;
-  bottom: 2px;
-  left: 50%;
-  z-index: 1;
-  width: 1px;
-  content: "";
-  background: rgb(245 248 250 / 24%);
-  transform: translateX(-50%);
+  display: none;
 }
 
 .rotation-content[hidden] {
@@ -1225,35 +1217,101 @@ select:hover {
 
   .player-frame {
     flex: 0 0 auto;
-    width: min(100%, calc(177.78vh - 470px));
-    width: min(100%, calc(177.78dvh - 470px));
+    width: min(100%, calc(177.78vh - 550px));
+    width: min(100%, calc(177.78dvh - 550px));
     margin-inline: auto;
   }
 
   .player-column > .notes-block {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    gap: 10px 12px;
     min-height: 0;
     flex: 1 1 auto;
-    flex-direction: column;
     margin-top: 12px;
     padding: 14px 16px;
     overflow: hidden;
   }
 
   .player-column .notes-heading {
-    margin-top: 14px;
-    padding-top: 12px;
+    grid-column: 1;
+    grid-row: 1;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .player-column .utility-actions {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+    margin: 0;
+  }
+
+  .player-column .notes-toolbar {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 
   .player-column .memo-list {
+    grid-column: 1 / -1;
+    grid-row: 3;
     min-height: 0;
-    flex: 1 1 auto;
     padding-right: 4px;
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-color: var(--line-strong) transparent;
     scrollbar-width: thin;
+  }
+
+  .player-column .memo-card {
+    display: grid;
+    grid-template-columns: 112px minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: stretch;
+    padding: 10px 12px;
+  }
+
+  .player-column .memo-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 5px;
+    margin: 0;
+  }
+
+  .player-column .memo-content-button {
+    align-self: center;
+    padding: 4px 0;
+    font-size: 0.88rem;
+    line-height: 1.5;
+  }
+
+  .player-column .memo-actions {
+    flex-wrap: wrap;
+    align-items: center;
+    align-content: center;
+    padding: 0 0 0 10px;
+    border-top: 0;
+    border-left: 1px solid var(--line);
+  }
+
+  .player-column .memo-action-button {
+    white-space: nowrap;
+  }
+
+  .player-column .memo-edit-area {
+    grid-column: 2 / -1;
+    min-width: 0;
+  }
+
+  .player-column .memo-edit-area .memo-actions {
+    justify-content: flex-end;
+    padding: 8px 0 0;
+    border-top: 1px solid var(--line);
+    border-left: 0;
   }
 
   .control-column {
@@ -1284,8 +1342,8 @@ select:hover {
 
 @media (min-width: 1121px) and (max-height: 650px) {
   .player-frame {
-    width: min(100%, calc(177.78vh - 470px));
-    width: min(100%, calc(177.78dvh - 470px));
+    width: min(100%, calc(177.78vh - 550px));
+    width: min(100%, calc(177.78dvh - 550px));
   }
 
 }
@@ -1349,8 +1407,8 @@ select:hover {
   }
 
   .rotation-content {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 4px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
   }
 
   .rotation-panel-actions {
