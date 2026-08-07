@@ -486,8 +486,9 @@ a:focus-visible {
 
 .rotation-slot {
   display: grid;
-  grid-template-columns: auto minmax(22px, 1fr) 20px;
-  gap: 2px;
+  grid-template-columns: minmax(0, 1fr) 22px;
+  grid-template-rows: auto 25px;
+  gap: 2px 3px;
   justify-content: center;
   align-items: center;
   min-width: 0;
@@ -504,15 +505,20 @@ a:focus-visible {
 }
 
 .rotation-slot > label {
+  grid-column: 1 / -1;
+  line-height: 1;
+  text-align: center;
   color: var(--text-subtle);
   font-family: Consolas, monospace;
-  font-size: 0.58rem;
+  font-size: 0.68rem;
   font-weight: 800;
 }
 
 .rotation-slot input {
+  grid-column: 1;
+  grid-row: 2;
   width: 100%;
-  max-width: 48px;
+  max-width: none;
   min-width: 0;
   height: 23px;
   padding: 3px 2px;
@@ -532,7 +538,9 @@ a:focus-visible {
 
 .setter-button {
   display: grid;
-  width: 20px;
+  grid-column: 2;
+  grid-row: 2;
+  width: 22px;
   height: 23px;
   padding: 0;
   place-items: center;
@@ -1273,6 +1281,10 @@ select:hover {
     margin: 0;
   }
 
+  .rotation-title-group span {
+    display: none;
+  }
+
   .shortcut-guide {
     display: none;
   }
@@ -1372,8 +1384,9 @@ select:hover {
   }
 
   .rotation-slot {
-    grid-template-columns: auto minmax(18px, 1fr) 18px;
-    gap: 1px;
+    grid-template-columns: minmax(0, 1fr) 20px;
+    grid-template-rows: auto 24px;
+    gap: 2px;
     padding: 2px 1px;
   }
 
@@ -1383,7 +1396,7 @@ select:hover {
   }
 
   .setter-button {
-    width: 18px;
+    width: 20px;
   }
 
   .control-button kbd {
