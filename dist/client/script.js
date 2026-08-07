@@ -42,6 +42,7 @@
 
   function initializeApp() {
     cacheElements();
+    arrangeWorkspacePanels();
     bindEvents();
     state.data = loadStoredData();
     state.rotationData = loadRotationData();
@@ -74,6 +75,10 @@
     elements.playerStatusDetail = document.getElementById("player-status-detail");
     elements.activeVideoLabel = document.getElementById("active-video-label");
     elements.playerColumn = document.querySelector(".player-column");
+    elements.controlColumn = document.querySelector(".control-column");
+    elements.memoCompose = document.querySelector(".memo-compose");
+    elements.notesBlock = document.querySelector(".notes-block");
+    elements.desktopLayoutQuery = window.matchMedia("(min-width: 1121px)");
     elements.rotationPanel = document.getElementById("rotation-panel");
     elements.rotationContent = document.getElementById("rotation-content");
     elements.rotationVideoHint = document.getElementById("rotation-video-hint");
@@ -121,7 +126,23 @@
     });
     elements.rotationToggleButton.addEventListener("click", toggleRotationPanel);
     elements.rotationResetButton.addEventListener("click", resetCurrentRotation);
+    if (typeof elements.desktopLayoutQuery.addEventListener === "function") {
+      elements.desktopLayoutQuery.addEventListener("change", arrangeWorkspacePanels);
+    } else {
+      elements.desktopLayoutQuery.addListener(arrangeWorkspacePanels);
+    }
     document.addEventListener("keydown", handleKeyboardShortcuts);
+  }
+
+  function arrangeWorkspacePanels() {
+    if (elements.desktopLayoutQuery.matches) {
+      elements.playerStatus.before(elements.notesBlock);
+      elements.controlColumn.append(elements.rotationPanel);
+      return;
+    }
+
+    elements.memoCompose.after(elements.rotationPanel);
+    elements.controlColumn.append(elements.notesBlock);
   }
 
   async function detectSharedMode() {
