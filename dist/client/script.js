@@ -49,7 +49,6 @@
     renderMemoList();
     renderRotationBoard();
     updateMemoCharacterCount();
-    updateDataActionButtons();
     loadYouTubeApi();
     detectSharedMode();
   }
@@ -67,10 +66,7 @@
     elements.saveMemoButton = document.getElementById("save-memo-button");
     elements.memoSearch = document.getElementById("memo-search");
     elements.memoSort = document.getElementById("memo-sort");
-    elements.exportCsvButton = document.getElementById("export-csv-button");
-    elements.deleteAllButton = document.getElementById("delete-all-button");
     elements.memoList = document.getElementById("memo-list");
-    elements.memoCount = document.getElementById("memo-count");
     elements.rewindButton = document.getElementById("rewind-button");
     elements.forwardButton = document.getElementById("forward-button");
     elements.liveEdgeButton = document.getElementById("live-edge-button");
@@ -115,8 +111,6 @@
     elements.saveMemoButton.addEventListener("click", saveMemoAtCurrentPosition);
     elements.memoSearch.addEventListener("input", renderMemoList);
     elements.memoSort.addEventListener("change", renderMemoList);
-    elements.exportCsvButton.addEventListener("click", exportCurrentVideoCsv);
-    elements.deleteAllButton.addEventListener("click", deleteAllCurrentVideoMemos);
     elements.rewindButton.addEventListener("click", () => movePlaybackBy(-5));
     elements.forwardButton.addEventListener("click", () => movePlaybackBy(5));
     elements.liveEdgeButton.addEventListener("click", seekToLiveEdge);
@@ -167,7 +161,6 @@
       state.sharedMode = true;
       state.data = createEmptyData();
       renderMemoList();
-      updateDataActionButtons();
 
       if (state.activeVideoId) {
         await loadSharedMemos(state.activeVideoId);
@@ -255,7 +248,6 @@
     setVideoInputCollapsed(true);
     renderMemoList();
     renderRotationBoard();
-    updateDataActionButtons();
     if (state.sharedMode) {
       loadSharedMemos(videoId);
     }
@@ -473,7 +465,6 @@
       updateMemoCharacterCount();
       state.editingMemoId = "";
       renderMemoList();
-      updateDataActionButtons();
       showToast(`${formatPlaybackTime(savedMemo.time)} にメモを保存しました。`, "success");
       elements.memoText.focus();
     } catch (error) {
@@ -966,12 +957,6 @@
     );
     const sortedMemos = sortMemos(filteredMemos);
 
-    if (searchQuery) {
-      elements.memoCount.textContent = `${sortedMemos.length} / ${allMemos.length}件`;
-    } else {
-      elements.memoCount.textContent = `${allMemos.length}件`;
-    }
-
     if (!state.activeVideoId) {
       elements.memoList.appendChild(
         createEmptyState("動画が選択されていません", "動画を読み込むと、その動画専用のメモが表示されます。"),
@@ -1170,7 +1155,6 @@
         state.editingMemoId = "";
       }
       renderMemoList();
-      updateDataActionButtons();
       showToast("メモを削除しました。", "success");
     } catch (error) {
       console.error("Memo delete failed:", error);
@@ -1178,82 +1162,6 @@
         showToast("メモを削除できませんでした。", "error");
       }
     }
-  }
-
-  async function deleteAllCurrentVideoMemos() {
-    const currentMemos = getCurrentVideoMemos();
-    if (!state.activeVideoId || currentMemos.length === 0) {
-      showToast("削除できるメモがありません。", "error");
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `動画 ${state.activeVideoId} のメモ ${currentMemos.length}件をすべて削除します。\nこの操作は元に戻せません。`,
-    );
-    if (!confirmed) {
-      return;
-    }
-    try {
-      if (state.sharedMode) {
-        await requestSharedApi(`/api/notes?videoId=${encodeURIComponent(state.activeVideoId)}`, {
-          method: "DELETE",
-        });
-        delete state.data.videos[state.activeVideoId];
-      } else if (!commitCurrentVideoMemos([])) {
-        return;
-      }
-
-      state.editingMemoId = "";
-      renderMemoList();
-      updateDataActionButtons();
-      showToast("この動画のメモをすべて削除しました。", "success");
-    } catch (error) {
-      console.error("All memo delete failed:", error);
-      if (!error.handled) {
-        showToast("メモを全件削除できませんでした。", "error");
-      }
-    }
-  }
-
-  function exportCurrentVideoCsv() {
-    const memos = sortMemos(getCurrentVideoMemos());
-    if (!state.activeVideoId || memos.length === 0) {
-      showToast("CSVに出力できるメモがありません。", "error");
-      return;
-    }
-
-    try {
-      const rows = [
-        ["動画ID", "メモ本文", "再生時間（秒）", "表示用再生時間", "保存日時"],
-        ...memos.map((memo) => [
-          memo.videoId,
-          memo.text,
-          String(memo.time),
-          formatPlaybackTime(memo.time),
-          memo.savedAt,
-        ]),
-      ];
-      const csvContent = rows.map((row) => row.map(escapeCsvCell).join(",")).join("\r\n");
-      const blob = new Blob([`\uFEFF${csvContent}`], { type: "text/csv;charset=utf-8" });
-      const downloadUrl = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      link.href = downloadUrl;
-      link.download = `youtube-memos_${state.activeVideoId}_${timestamp}.csv`;
-      link.hidden = true;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
-      showToast(`${memos.length}件のメモをCSVに出力しました。`, "success");
-    } catch (error) {
-      console.error("CSV export failed:", error);
-      showToast("CSV出力に失敗しました。", "error");
-    }
-  }
-
-  function escapeCsvCell(value) {
-    return `"${String(value).replace(/"/g, '""')}"`;
   }
 
   function sortMemos(memos) {
@@ -1289,7 +1197,6 @@
       }
       if (state.activeVideoId === videoId) {
         renderMemoList();
-        updateDataActionButtons();
       }
     } catch (error) {
       console.error("Shared memo load failed:", error);
@@ -1485,12 +1392,6 @@
 
   function updateMemoCharacterCount() {
     elements.memoCharacterCount.textContent = `${elements.memoText.value.length}文字`;
-  }
-
-  function updateDataActionButtons() {
-    const hasMemos = getCurrentVideoMemos().length > 0;
-    elements.exportCsvButton.disabled = !hasMemos;
-    elements.deleteAllButton.disabled = !hasMemos;
   }
 
   function setPlayerStatus(title, detail, statusType) {
