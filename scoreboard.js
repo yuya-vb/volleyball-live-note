@@ -194,9 +194,6 @@
         state.match = result.match;
         render();
       }
-      if (result.sideOut) {
-        showToast(`${result.match[team === "home" ? "homeName" : "awayName"]}がサイドアウト。ローテーションしました。`);
-      }
     } catch (error) {
       showToast(error.message, true);
       pollMatch();
