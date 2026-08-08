@@ -8,6 +8,8 @@
   const ROTATION_TEAMS = ["home", "away"];
   const ROTATION_POSITIONS = [1, 2, 3, 4, 5, 6];
   const ROTATION_INPUT_MAX_LENGTH = 2;
+  const ROTATION_MATCH_STORAGE_KEY = "youtubeLiveRotationMatchLinks.v1";
+  const MATCH_ID_PATTERN = /^[A-Z0-9]{4,12}$/;
   const VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
   const API_LOAD_TIMEOUT_MS = 15000;
   const SEEK_VERIFY_DELAY_MS = 1100;
@@ -20,6 +22,9 @@
     window.location.hostname.endsWith(".pages.dev")
       ? "https://youtube-live-memo-jp.junmari10221122.chatgpt.site"
       : "";
+  const SYNC_API_BASE = window.location.hostname.endsWith(".chatgpt.site")
+    ? ""
+    : "https://youtube-live-memo-jp.junmari10221122.chatgpt.site";
 
   const state = {
     player: null,
@@ -34,6 +39,12 @@
     sharedMode: false,
     data: createEmptyData(),
     rotationData: createEmptyRotationData(),
+    rotationMatchLinks: Object.create(null),
+    syncMatchId: "",
+    syncRevision: 0,
+    syncPollTimer: null,
+    syncPushTimer: null,
+    syncApplying: false,
   };
 
   const elements = {};
@@ -46,6 +57,7 @@
     bindEvents();
     state.data = loadStoredData();
     state.rotationData = loadRotationData();
+    state.rotationMatchLinks = loadRotationMatchLinks();
     renderMemoList();
     renderRotationBoard();
     updateMemoCharacterCount();
@@ -84,6 +96,10 @@
     elements.rotationVideoHint = document.getElementById("rotation-video-hint");
     elements.rotationToggleButton = document.getElementById("rotation-toggle-button");
     elements.rotationResetButton = document.getElementById("rotation-reset-button");
+    elements.rotationMatchId = document.getElementById("rotation-match-id");
+    elements.rotationSyncButton = document.getElementById("rotation-sync-button");
+    elements.rotationSyncStatus = document.getElementById("rotation-sync-status");
+    elements.scoreboardLink = document.getElementById("scoreboard-link");
     elements.homeRotationLabel = document.getElementById("home-rotation-label");
     elements.awayRotationLabel = document.getElementById("away-rotation-label");
     elements.rotationInputs = Array.from(
@@ -125,6 +141,18 @@
     });
     elements.rotationToggleButton.addEventListener("click", toggleRotationPanel);
     elements.rotationResetButton.addEventListener("click", resetCurrentRotation);
+    elements.rotationMatchId.addEventListener("input", () => {
+      elements.rotationMatchId.value = elements.rotationMatchId.value
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, "");
+    });
+    elements.rotationMatchId.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        toggleRotationSync();
+      }
+    });
+    elements.rotationSyncButton.addEventListener("click", toggleRotationSync);
     if (typeof elements.desktopLayoutQuery.addEventListener === "function") {
       elements.desktopLayoutQuery.addEventListener("change", arrangeWorkspacePanels);
     } else {
@@ -248,6 +276,7 @@
     setVideoInputCollapsed(true);
     renderMemoList();
     renderRotationBoard();
+    restoreRotationSyncForVideo();
     if (state.sharedMode) {
       loadSharedMemos(videoId);
     }
@@ -797,7 +826,9 @@
     elements.rotationPanel.classList.toggle("is-disabled", !hasVideo);
     elements.rotationVideoHint.classList.toggle("is-warning", !hasVideo);
     elements.rotationVideoHint.textContent = hasVideo
-      ? `VIDEO ${state.activeVideoId} に端末保存`
+      ? state.syncMatchId
+        ? `試合 ${state.syncMatchId} と共有`
+        : `VIDEO ${state.activeVideoId} に端末保存`
       : "動画を読み込むと保存されます";
     elements.homeRotationLabel.textContent = `R${displayRotation.home.rotation}`;
     elements.awayRotationLabel.textContent = `R${displayRotation.away.rotation}`;
@@ -852,6 +883,7 @@
     videoRotation[team].players[position] = playerNumber;
     elements.rotationResetButton.disabled = false;
     persistRotationData();
+    queueRotationSync();
   }
 
   function handleSetterSelection(event) {
@@ -872,6 +904,7 @@
     elements.rotationResetButton.disabled = false;
     persistRotationData();
     renderRotationBoard();
+    queueRotationSync();
   }
 
   function handleRotationControl(event) {
@@ -918,6 +951,7 @@
 
     persistRotationData();
     renderRotationBoard();
+    queueRotationSync();
   }
 
   function resetCurrentRotation() {
@@ -934,8 +968,204 @@
     delete state.rotationData.videos[state.activeVideoId];
     if (persistRotationData()) {
       renderRotationBoard();
+      queueRotationSync();
       showToast("ローテーションを初期化しました。", "success");
     }
+  }
+
+  function loadRotationMatchLinks() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(ROTATION_MATCH_STORAGE_KEY) || "{}");
+      if (!isPlainObject(parsed)) {
+        return Object.create(null);
+      }
+      const links = Object.create(null);
+      Object.entries(parsed).forEach(([videoId, matchId]) => {
+        if (VIDEO_ID_PATTERN.test(videoId) && MATCH_ID_PATTERN.test(matchId)) {
+          links[videoId] = matchId;
+        }
+      });
+      return links;
+    } catch {
+      return Object.create(null);
+    }
+  }
+
+  function persistRotationMatchLinks() {
+    try {
+      localStorage.setItem(ROTATION_MATCH_STORAGE_KEY, JSON.stringify(state.rotationMatchLinks));
+    } catch (error) {
+      console.error("Rotation match link save failed:", error);
+      showToast("試合IDの保存に失敗しました。", "error");
+    }
+  }
+
+  function restoreRotationSyncForVideo() {
+    stopRotationSync();
+    const matchId = state.rotationMatchLinks[state.activeVideoId] || "";
+    elements.rotationMatchId.value = matchId;
+    updateRotationSyncUi();
+    if (matchId) {
+      connectRotationSync(matchId, true);
+    }
+  }
+
+  function toggleRotationSync() {
+    if (state.syncMatchId) {
+      delete state.rotationMatchLinks[state.activeVideoId];
+      persistRotationMatchLinks();
+      stopRotationSync();
+      elements.rotationMatchId.value = "";
+      updateRotationSyncUi();
+      renderRotationBoard();
+      showToast("得点サイトとの同期を解除しました。", "success");
+      return;
+    }
+    connectRotationSync(elements.rotationMatchId.value.trim().toUpperCase(), false);
+  }
+
+  async function connectRotationSync(matchId, silent) {
+    if (!state.activeVideoId) {
+      if (!silent) showToast("先にYouTube動画を読み込んでください。", "error");
+      return;
+    }
+    if (!MATCH_ID_PATTERN.test(matchId)) {
+      if (!silent) showToast("試合IDは4〜12文字の英数字で入力してください。", "error");
+      return;
+    }
+    elements.rotationSyncButton.disabled = true;
+    try {
+      const result = await requestSyncApi(`/api/matches/${encodeURIComponent(matchId)}`);
+      state.syncMatchId = matchId;
+      state.rotationMatchLinks[state.activeVideoId] = matchId;
+      persistRotationMatchLinks();
+      const localRotation = getCurrentVideoRotation(false);
+      if (hasRotationContent(localRotation) && !hasRotationContent(result.match)) {
+        await pushRotationSync();
+      } else {
+        applySyncedRotation(result.match);
+      }
+      startRotationPolling();
+      updateRotationSyncUi();
+      if (!silent) showToast(`試合 ${matchId} と同期しました。`, "success");
+    } catch (error) {
+      if (!silent) showToast(error.message, "error");
+      updateRotationSyncUi("接続できません");
+    } finally {
+      elements.rotationSyncButton.disabled = false;
+    }
+  }
+
+  function stopRotationSync() {
+    window.clearInterval(state.syncPollTimer);
+    window.clearTimeout(state.syncPushTimer);
+    state.syncPollTimer = null;
+    state.syncPushTimer = null;
+    state.syncMatchId = "";
+    state.syncRevision = 0;
+  }
+
+  function startRotationPolling() {
+    window.clearInterval(state.syncPollTimer);
+    state.syncPollTimer = window.setInterval(pollRotationSync, 1500);
+  }
+
+  async function pollRotationSync() {
+    if (!state.syncMatchId || state.syncApplying) return;
+    try {
+      const result = await requestSyncApi(`/api/matches/${encodeURIComponent(state.syncMatchId)}`);
+      if (result.match.revision !== state.syncRevision) {
+        applySyncedRotation(result.match);
+      }
+      updateRotationSyncUi();
+    } catch (error) {
+      updateRotationSyncUi("再接続中…");
+    }
+  }
+
+  function applySyncedRotation(match) {
+    const home = sanitizeTeamRotation(match?.home);
+    const away = sanitizeTeamRotation(match?.away);
+    if (!home || !away || !state.activeVideoId) return;
+    state.syncApplying = true;
+    state.rotationData.videos[state.activeVideoId] = { home, away };
+    state.syncRevision = Number(match.revision) || 0;
+    persistRotationData();
+    renderRotationBoard();
+    state.syncApplying = false;
+  }
+
+  function hasRotationContent(value) {
+    if (!value) return false;
+    return ROTATION_TEAMS.some((team) => {
+      const rotation = value[team];
+      return Boolean(
+        rotation &&
+        (rotation.rotation !== 1 ||
+          rotation.setterPosition !== null ||
+          ROTATION_POSITIONS.some((position) => rotation.players?.[position])),
+      );
+    });
+  }
+
+  function queueRotationSync() {
+    if (!state.syncMatchId || state.syncApplying) return;
+    window.clearTimeout(state.syncPushTimer);
+    state.syncPushTimer = window.setTimeout(pushRotationSync, 250);
+  }
+
+  async function pushRotationSync() {
+    const videoRotation = getCurrentVideoRotation(false) || createEmptyVideoRotation();
+    if (!state.syncMatchId) return;
+    try {
+      const result = await requestSyncApi(
+        `/api/matches/${encodeURIComponent(state.syncMatchId)}/rotation`,
+        { method: "PUT", body: videoRotation },
+      );
+      state.syncRevision = Number(result.match.revision) || state.syncRevision;
+      updateRotationSyncUi();
+    } catch (error) {
+      updateRotationSyncUi("送信に失敗");
+      showToast(error.message, "error");
+    }
+  }
+
+  function updateRotationSyncUi(statusText = "") {
+    const connected = Boolean(state.syncMatchId);
+    elements.rotationSyncButton.textContent = connected ? "解除" : "接続";
+    elements.rotationMatchId.disabled = connected;
+    elements.rotationSyncStatus.textContent = statusText || (connected ? `試合 ${state.syncMatchId} と同期中` : "未接続");
+    elements.rotationSyncStatus.classList.toggle("is-connected", connected && !statusText);
+    elements.scoreboardLink.href = connected
+      ? `scoreboard.html?match=${encodeURIComponent(state.syncMatchId)}`
+      : "scoreboard.html";
+  }
+
+  async function requestSyncApi(path, options = {}) {
+    let response;
+    try {
+      response = await fetch(`${SYNC_API_BASE}${path}`, {
+        method: options.method || "GET",
+        headers: {
+          Accept: "application/json",
+          ...(options.body ? { "Content-Type": "application/json" } : {}),
+        },
+        body: options.body ? JSON.stringify(options.body) : undefined,
+        cache: "no-store",
+      });
+    } catch {
+      throw new Error("同期サーバーへ接続できません。通信状態を確認してください。");
+    }
+    let result = {};
+    try {
+      result = await response.json();
+    } catch {
+      // Use the fallback error below.
+    }
+    if (!response.ok) {
+      throw new Error(result.error || "ローテーションの同期に失敗しました。");
+    }
+    return result;
   }
 
   function toggleRotationPanel() {

@@ -26,7 +26,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p _site
-          cp index.html style.css script.js _site/
+          cp index.html style.css script.js scoreboard.html scoreboard.css scoreboard.js _site/
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3

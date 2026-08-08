@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#050a0f" />
+    <title>Volleyball Scoreboard</title>
+    <link rel="stylesheet" href="scoreboard.css" />
+  </head>
+  <body>
+    <main class="scoreboard-app">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">LIVE MATCH CONTROL</p>
+          <h1>得点・ローテーション</h1>
+        </div>
+        <a href="index.html" class="note-link">ライブメモを開く</a>
+      </header>
+
+      <section class="match-connect" aria-labelledby="connect-title">
+        <div>
+          <h2 id="connect-title">試合を接続</h2>
+          <p>新しい試合を作るか、共有された試合IDを入力してください。</p>
+        </div>
+        <div class="connect-actions">
+          <input id="match-id-input" maxlength="12" autocomplete="off" spellcheck="false" placeholder="試合ID" aria-label="試合ID" />
+          <button id="connect-button" type="button">接続</button>
+          <button id="create-button" class="primary" type="button">新しい試合</button>
+        </div>
+        <div id="connection-status" class="connection-status" role="status" aria-live="polite">未接続</div>
+      </section>
+
+      <section id="match-board" class="match-board" hidden>
+        <div class="set-control">
+          <button id="set-down" type="button" aria-label="セット数を減らす">−</button>
+          <div><span>SET</span><strong id="set-number">1</strong></div>
+          <button id="set-up" type="button" aria-label="セット数を増やす">＋</button>
+        </div>
+
+        <div class="teams">
+          <article class="team-card away" data-team="away">
+            <div class="team-heading">
+              <input id="away-name" maxlength="30" value="相手チーム" aria-label="相手チーム名" />
+              <button class="serve-button" data-serve-team="away" type="button">サーブ</button>
+            </div>
+            <div class="score-control">
+              <button data-score-team="away" data-score-delta="-1" type="button">−</button>
+              <strong id="away-score">0</strong>
+              <button data-score-team="away" data-score-delta="1" type="button">＋</button>
+            </div>
+            <div class="rotation-title"><span>ROTATION</span><strong id="away-rotation-label">R1</strong></div>
+            <div id="away-court" class="court away-court" aria-label="相手チームのローテーション"></div>
+            <div class="rotation-actions">
+              <button data-rotate-team="away" data-direction="previous" type="button">← 戻す</button>
+              <button data-rotate-team="away" data-direction="next" type="button">回す →</button>
+            </div>
+          </article>
+
+          <div class="net" aria-hidden="true"><span>NET</span></div>
+
+          <article class="team-card home" data-team="home">
+            <div class="team-heading">
+              <input id="home-name" maxlength="30" value="自チーム" aria-label="自チーム名" />
+              <button class="serve-button" data-serve-team="home" type="button">サーブ</button>
+            </div>
+            <div class="score-control">
+              <button data-score-team="home" data-score-delta="-1" type="button">−</button>
+              <strong id="home-score">0</strong>
+              <button data-score-team="home" data-score-delta="1" type="button">＋</button>
+            </div>
+            <div class="rotation-title"><span>ROTATION</span><strong id="home-rotation-label">R1</strong></div>
+            <div id="home-court" class="court home-court" aria-label="自チームのローテーション"></div>
+            <div class="rotation-actions">
+              <button data-rotate-team="home" data-direction="previous" type="button">← 戻す</button>
+              <button data-rotate-team="home" data-direction="next" type="button">回す →</button>
+            </div>
+          </article>
+        </div>
+
+        <footer class="match-footer">
+          <span>試合ID</span>
+          <button id="copy-match-id" type="button"><strong id="active-match-id"></strong>　コピー</button>
+          <button id="reset-match" class="danger" type="button">得点をリセット</button>
+        </footer>
+      </section>
+    </main>
+    <div id="toast-region" class="toast-region" aria-live="polite"></div>
+    <script src="scoreboard.js"></script>
+  </body>
+</html>

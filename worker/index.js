@@ -1,6 +1,7 @@
 const VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
 const MAX_MEMO_LENGTH = 5000;
 const MAX_REQUEST_BYTES = 20000;
+const MATCH_ID_PATTERN = /^[A-Z0-9]{4,12}$/;
 
 export default {
   async fetch(request, env) {
@@ -25,6 +26,14 @@ export default {
 
       if (url.pathname === "/api/notes" && request.method === "DELETE") {
         return withCors(request, await deleteVideoNotes(url, env));
+      }
+
+      if (url.pathname === "/api/matches" && request.method === "POST") {
+        return withCors(request, await createMatch(request, env));
+      }
+
+      if (url.pathname.startsWith("/api/matches/")) {
+        return withCors(request, await handleMatchRequest(request, url, env));
       }
 
       if (url.pathname.startsWith("/api/notes/")) {
@@ -163,6 +172,185 @@ async function deleteVideoNotes(url, env) {
   return jsonResponse({ deleted: result.meta?.changes || 0 });
 }
 
+async function createMatch(request, env) {
+  const body = await readJsonBody(request);
+  if (body.error) {
+    return body.error;
+  }
+  const requestedId = String(body.value?.matchId || "").trim().toUpperCase();
+  const matchId = requestedId || createMatchId();
+  if (!MATCH_ID_PATTERN.test(matchId)) {
+    return jsonResponse({ error: "試合IDは4〜12文字の英数字で入力してください。" }, 400);
+  }
+
+  const existing = await getMatchRow(env, matchId);
+  if (existing) {
+    return jsonResponse({ error: "その試合IDはすでに使用されています。" }, 409);
+  }
+  await ensureMatch(env, matchId);
+  return jsonResponse({ match: mapMatchRow(await getMatchRow(env, matchId)) }, 201);
+}
+
+async function handleMatchRequest(request, url, env) {
+  const parts = url.pathname.slice("/api/matches/".length).split("/").filter(Boolean);
+  const matchId = decodeURIComponent(parts[0] || "").trim().toUpperCase();
+  const section = parts[1] || "";
+  if (!MATCH_ID_PATTERN.test(matchId)) {
+    return jsonResponse({ error: "試合IDが正しくありません。" }, 400);
+  }
+
+  if (request.method === "GET" && !section) {
+    const row = await getMatchRow(env, matchId);
+    return row
+      ? jsonResponse({ match: mapMatchRow(row) })
+      : jsonResponse({ error: "試合が見つかりません。" }, 404);
+  }
+  if (request.method === "PUT" && section === "score") {
+    return updateMatchScore(request, env, matchId);
+  }
+  if (request.method === "PUT" && section === "rotation") {
+    return updateMatchRotation(request, env, matchId);
+  }
+  return jsonResponse({ error: "試合APIが見つかりません。" }, 404);
+}
+
+async function updateMatchScore(request, env, matchId) {
+  const body = await readJsonBody(request);
+  if (body.error) {
+    return body.error;
+  }
+  const value = body.value || {};
+  const homeName = sanitizeTeamName(value.homeName, "自チーム");
+  const awayName = sanitizeTeamName(value.awayName, "相手チーム");
+  if (
+    !Number.isInteger(value.homeScore) || value.homeScore < 0 || value.homeScore > 99 ||
+    !Number.isInteger(value.awayScore) || value.awayScore < 0 || value.awayScore > 99 ||
+    !Number.isInteger(value.setNumber) || value.setNumber < 1 || value.setNumber > 9 ||
+    !["home", "away", "none"].includes(value.servingTeam)
+  ) {
+    return jsonResponse({ error: "得点データが正しくありません。" }, 400);
+  }
+
+  await ensureMatch(env, matchId);
+  await env.DB.prepare(
+    `UPDATE matches
+     SET home_name = ?, away_name = ?, home_score = ?, away_score = ?,
+         set_number = ?, serving_team = ?, revision = revision + 1, updated_at = ?
+     WHERE match_id = ?`,
+  )
+    .bind(homeName, awayName, value.homeScore, value.awayScore, value.setNumber, value.servingTeam, new Date().toISOString(), matchId)
+    .run();
+  return jsonResponse({ match: mapMatchRow(await getMatchRow(env, matchId)) });
+}
+
+async function updateMatchRotation(request, env, matchId) {
+  const body = await readJsonBody(request);
+  if (body.error) {
+    return body.error;
+  }
+  const home = sanitizeRotation(body.value?.home);
+  const away = sanitizeRotation(body.value?.away);
+  if (!home || !away) {
+    return jsonResponse({ error: "ローテーションデータが正しくありません。" }, 400);
+  }
+
+  await ensureMatch(env, matchId);
+  await env.DB.prepare(
+    `UPDATE matches
+     SET home_rotation = ?, away_rotation = ?, revision = revision + 1, updated_at = ?
+     WHERE match_id = ?`,
+  )
+    .bind(JSON.stringify(home), JSON.stringify(away), new Date().toISOString(), matchId)
+    .run();
+  return jsonResponse({ match: mapMatchRow(await getMatchRow(env, matchId)) });
+}
+
+async function ensureMatch(env, matchId) {
+  const now = new Date().toISOString();
+  const emptyRotation = JSON.stringify(createEmptyRotation());
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO matches
+      (match_id, home_name, away_name, home_score, away_score, set_number, serving_team,
+       home_rotation, away_rotation, revision, updated_at)
+     VALUES (?, ?, ?, 0, 0, 1, 'none', ?, ?, 1, ?)`,
+  )
+    .bind(matchId, "自チーム", "相手チーム", emptyRotation, emptyRotation, now)
+    .run();
+}
+
+function getMatchRow(env, matchId) {
+  return env.DB.prepare(
+    `SELECT match_id, home_name, away_name, home_score, away_score, set_number,
+            serving_team, home_rotation, away_rotation, revision, updated_at
+     FROM matches WHERE match_id = ?`,
+  )
+    .bind(matchId)
+    .first();
+}
+
+function createMatchId() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = new Uint8Array(6);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("");
+}
+
+function createEmptyRotation() {
+  return {
+    rotation: 1,
+    players: { 1: "", 2: "", 3: "", 4: "", 5: "", 6: "" },
+    setterPosition: null,
+  };
+}
+
+function sanitizeRotation(value) {
+  if (!value || typeof value !== "object" || !Number.isInteger(value.rotation) || value.rotation < 1 || value.rotation > 6) {
+    return null;
+  }
+  const players = {};
+  for (let position = 1; position <= 6; position += 1) {
+    const player = String(value.players?.[position] ?? "");
+    if (!/^\d{0,2}$/.test(player)) {
+      return null;
+    }
+    players[position] = player;
+  }
+  const setterPosition = value.setterPosition === null ? null : Number(value.setterPosition);
+  if (setterPosition !== null && (!Number.isInteger(setterPosition) || setterPosition < 1 || setterPosition > 6)) {
+    return null;
+  }
+  return { rotation: value.rotation, players, setterPosition };
+}
+
+function sanitizeTeamName(value, fallback) {
+  const name = typeof value === "string" ? value.trim().slice(0, 30) : "";
+  return name || fallback;
+}
+
+function mapMatchRow(row) {
+  let homeRotation = createEmptyRotation();
+  let awayRotation = createEmptyRotation();
+  try {
+    homeRotation = sanitizeRotation(JSON.parse(row.home_rotation)) || homeRotation;
+    awayRotation = sanitizeRotation(JSON.parse(row.away_rotation)) || awayRotation;
+  } catch {
+    // Keep safe defaults when persisted JSON is invalid.
+  }
+  return {
+    matchId: String(row.match_id),
+    homeName: String(row.home_name),
+    awayName: String(row.away_name),
+    homeScore: Number(row.home_score),
+    awayScore: Number(row.away_score),
+    setNumber: Number(row.set_number),
+    servingTeam: String(row.serving_team),
+    home: homeRotation,
+    away: awayRotation,
+    revision: Number(row.revision),
+    updatedAt: String(row.updated_at),
+  };
+}
+
 function validateNewNote(value) {
   if (!value || typeof value !== "object") {
     return "送信データが正しくありません。";
@@ -214,7 +402,10 @@ function jsonResponse(data, status = 200) {
 
 function withCors(request, response) {
   const origin = request.headers.get("Origin") || "";
-  if (origin !== "https://volleyball-live-note.pages.dev") {
+  const isAllowedOrigin =
+    origin === "https://volleyball-live-note.pages.dev" ||
+    /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin);
+  if (!isAllowedOrigin) {
     return response;
   }
 

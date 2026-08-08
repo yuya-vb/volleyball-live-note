@@ -68,6 +68,14 @@
             </div>
           </div>
 
+          <div class="rotation-sync-bar">
+            <label for="rotation-match-id">得点サイトと同期</label>
+            <input id="rotation-match-id" maxlength="12" autocomplete="off" spellcheck="false" placeholder="試合ID" />
+            <button id="rotation-sync-button" type="button">接続</button>
+            <a id="scoreboard-link" href="scoreboard.html" target="_blank" rel="noopener">得点サイト</a>
+            <span id="rotation-sync-status" role="status" aria-live="polite">未接続</span>
+          </div>
+
           <div id="rotation-content" class="rotation-content">
             <article class="rotation-team away-team" data-rotation-team="away">
               <div class="rotation-team-header">
