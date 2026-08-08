@@ -402,6 +402,28 @@ a:focus-visible {
   font-size: 0.61rem;
 }
 
+.rotation-serve-selector {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: auto 1fr 1fr;
+  gap: 5px;
+  align-items: center;
+}
+
+.rotation-serve-selector span {
+  grid-column: auto;
+  padding-right: 3px;
+  color: var(--text-muted);
+  font-size: 0.61rem;
+  font-weight: 800;
+}
+
+.rotation-serve-selector button[aria-pressed="true"] {
+  color: #171006;
+  background: var(--warning);
+  border-color: var(--warning);
+}
+
 .rotation-sync-bar span.is-connected {
   color: var(--success);
 }

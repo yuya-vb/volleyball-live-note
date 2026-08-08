@@ -211,6 +211,12 @@ async function handleMatchRequest(request, url, env) {
   if (request.method === "PUT" && section === "rotation") {
     return updateMatchRotation(request, env, matchId);
   }
+  if (request.method === "PUT" && section === "serve") {
+    return updateMatchServe(request, env, matchId);
+  }
+  if (request.method === "PUT" && section === "point") {
+    return updateMatchPoint(request, env, matchId);
+  }
   return jsonResponse({ error: "試合APIが見つかりません。" }, 404);
 }
 
@@ -263,6 +269,88 @@ async function updateMatchRotation(request, env, matchId) {
     .bind(JSON.stringify(home), JSON.stringify(away), new Date().toISOString(), matchId)
     .run();
   return jsonResponse({ match: mapMatchRow(await getMatchRow(env, matchId)) });
+}
+
+async function updateMatchServe(request, env, matchId) {
+  const body = await readJsonBody(request);
+  if (body.error) {
+    return body.error;
+  }
+  const servingTeam = body.value?.servingTeam;
+  if (!["home", "away", "none"].includes(servingTeam)) {
+    return jsonResponse({ error: "サーブ権の指定が正しくありません。" }, 400);
+  }
+  await ensureMatch(env, matchId);
+  await env.DB.prepare(
+    `UPDATE matches
+     SET serving_team = ?, revision = revision + 1, updated_at = ?
+     WHERE match_id = ?`,
+  )
+    .bind(servingTeam, new Date().toISOString(), matchId)
+    .run();
+  return jsonResponse({ match: mapMatchRow(await getMatchRow(env, matchId)) });
+}
+
+async function updateMatchPoint(request, env, matchId) {
+  const body = await readJsonBody(request);
+  if (body.error) {
+    return body.error;
+  }
+  const team = body.value?.team;
+  const delta = body.value?.delta;
+  if (!["home", "away"].includes(team) || ![-1, 1].includes(delta)) {
+    return jsonResponse({ error: "得点操作が正しくありません。" }, 400);
+  }
+
+  await ensureMatch(env, matchId);
+  const match = mapMatchRow(await getMatchRow(env, matchId));
+  if (delta === 1 && match.servingTeam === "none") {
+    return jsonResponse({ error: "先に映像アプリで最初のサーブ権を設定してください。" }, 409);
+  }
+
+  const scoreKey = team === "home" ? "homeScore" : "awayScore";
+  const previousScore = match[scoreKey];
+  const nextScore = Math.max(0, Math.min(99, match[scoreKey] + delta));
+  const sideOut = delta === 1 && nextScore !== previousScore && match.servingTeam !== team;
+  match[scoreKey] = nextScore;
+  if (sideOut) {
+    rotateRotationNext(match[team]);
+    match.servingTeam = team;
+  }
+
+  await env.DB.prepare(
+    `UPDATE matches
+     SET home_score = ?, away_score = ?, serving_team = ?,
+         home_rotation = ?, away_rotation = ?, revision = revision + 1, updated_at = ?
+     WHERE match_id = ?`,
+  )
+    .bind(
+      match.homeScore,
+      match.awayScore,
+      match.servingTeam,
+      JSON.stringify(match.home),
+      JSON.stringify(match.away),
+      new Date().toISOString(),
+      matchId,
+    )
+    .run();
+  return jsonResponse({
+    match: mapMatchRow(await getMatchRow(env, matchId)),
+    sideOut,
+  });
+}
+
+function rotateRotationNext(rotation) {
+  const previousPlayers = { ...rotation.players };
+  const previousSetterPosition = rotation.setterPosition;
+  for (let position = 1; position <= 6; position += 1) {
+    const sourcePosition = position === 6 ? 1 : position + 1;
+    rotation.players[position] = previousPlayers[sourcePosition] || "";
+  }
+  rotation.rotation = (rotation.rotation % 6) + 1;
+  if (previousSetterPosition !== null) {
+    rotation.setterPosition = previousSetterPosition === 1 ? 6 : previousSetterPosition - 1;
+  }
 }
 
 async function ensureMatch(env, matchId) {

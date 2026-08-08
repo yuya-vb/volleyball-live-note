@@ -73,6 +73,11 @@
             <input id="rotation-match-id" maxlength="12" autocomplete="off" spellcheck="false" placeholder="試合ID" />
             <button id="rotation-sync-button" type="button">接続</button>
             <a id="scoreboard-link" href="scoreboard.html" target="_blank" rel="noopener">得点サイト</a>
+            <div class="rotation-serve-selector" aria-label="最初のサーブ権">
+              <span>サーブ権</span>
+              <button type="button" data-sync-serve="away" aria-pressed="false" disabled>相手</button>
+              <button type="button" data-sync-serve="home" aria-pressed="false" disabled>自チーム</button>
+            </div>
             <span id="rotation-sync-status" role="status" aria-live="polite">未接続</span>
           </div>
 

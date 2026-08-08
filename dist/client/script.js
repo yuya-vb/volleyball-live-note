@@ -42,6 +42,7 @@
     rotationMatchLinks: Object.create(null),
     syncMatchId: "",
     syncRevision: 0,
+    syncServingTeam: "none",
     syncPollTimer: null,
     syncPushTimer: null,
     syncApplying: false,
@@ -100,6 +101,7 @@
     elements.rotationSyncButton = document.getElementById("rotation-sync-button");
     elements.rotationSyncStatus = document.getElementById("rotation-sync-status");
     elements.scoreboardLink = document.getElementById("scoreboard-link");
+    elements.syncServeButtons = Array.from(document.querySelectorAll("[data-sync-serve]"));
     elements.homeRotationLabel = document.getElementById("home-rotation-label");
     elements.awayRotationLabel = document.getElementById("away-rotation-label");
     elements.rotationInputs = Array.from(
@@ -153,6 +155,9 @@
       }
     });
     elements.rotationSyncButton.addEventListener("click", toggleRotationSync);
+    elements.syncServeButtons.forEach((button) => {
+      button.addEventListener("click", setSyncedServe);
+    });
     if (typeof elements.desktopLayoutQuery.addEventListener === "function") {
       elements.desktopLayoutQuery.addEventListener("change", arrangeWorkspacePanels);
     } else {
@@ -1063,6 +1068,7 @@
     state.syncPushTimer = null;
     state.syncMatchId = "";
     state.syncRevision = 0;
+    state.syncServingTeam = "none";
   }
 
   function startRotationPolling() {
@@ -1090,6 +1096,9 @@
     state.syncApplying = true;
     state.rotationData.videos[state.activeVideoId] = { home, away };
     state.syncRevision = Number(match.revision) || 0;
+    state.syncServingTeam = ["home", "away"].includes(match.servingTeam)
+      ? match.servingTeam
+      : "none";
     persistRotationData();
     renderRotationBoard();
     state.syncApplying = false;
@@ -1123,6 +1132,7 @@
         { method: "PUT", body: videoRotation },
       );
       state.syncRevision = Number(result.match.revision) || state.syncRevision;
+      state.syncServingTeam = result.match.servingTeam || state.syncServingTeam;
       updateRotationSyncUi();
     } catch (error) {
       updateRotationSyncUi("送信に失敗");
@@ -1136,9 +1146,40 @@
     elements.rotationMatchId.disabled = connected;
     elements.rotationSyncStatus.textContent = statusText || (connected ? `試合 ${state.syncMatchId} と同期中` : "未接続");
     elements.rotationSyncStatus.classList.toggle("is-connected", connected && !statusText);
+    elements.syncServeButtons.forEach((button) => {
+      const isServing = connected && button.dataset.syncServe === state.syncServingTeam;
+      button.disabled = !connected;
+      button.setAttribute("aria-pressed", String(isServing));
+    });
     elements.scoreboardLink.href = connected
       ? `scoreboard.html?match=${encodeURIComponent(state.syncMatchId)}`
       : "scoreboard.html";
+  }
+
+  async function setSyncedServe(event) {
+    if (!state.syncMatchId) {
+      showToast("先に得点サイトと同期してください。", "error");
+      return;
+    }
+    const servingTeam = event.currentTarget.dataset.syncServe;
+    if (!["home", "away"].includes(servingTeam)) return;
+    elements.syncServeButtons.forEach((button) => { button.disabled = true; });
+    try {
+      const result = await requestSyncApi(
+        `/api/matches/${encodeURIComponent(state.syncMatchId)}/serve`,
+        { method: "PUT", body: { servingTeam } },
+      );
+      state.syncServingTeam = result.match.servingTeam;
+      state.syncRevision = Number(result.match.revision) || state.syncRevision;
+      updateRotationSyncUi();
+      showToast(
+        `${servingTeam === "home" ? "自チーム" : "相手チーム"}を最初のサーブに設定しました。`,
+        "success",
+      );
+    } catch (error) {
+      showToast(error.message, "error");
+      updateRotationSyncUi("サーブ権を設定できません");
+    }
   }
 
   async function requestSyncApi(path, options = {}) {

@@ -170,13 +170,37 @@
     elements.connectionStatus.classList.add("connected");
   }
 
-  function handleScore(event) {
+  async function handleScore(event) {
     const team = event.currentTarget.dataset.scoreTeam;
     const delta = Number(event.currentTarget.dataset.scoreDelta);
+    if (delta === 1 && state.match.servingTeam === "none") {
+      showToast("先に映像アプリで最初のサーブ権を設定してください。", true);
+      return;
+    }
     const key = `${team}Score`;
+    const sideOut = delta === 1 && state.match.servingTeam !== team;
     state.match[key] = Math.max(0, Math.min(99, state.match[key] + delta));
+    if (sideOut) {
+      rotateTeam(state.match[team], "next");
+      state.match.servingTeam = team;
+    }
     render();
-    saveScoreState();
+    try {
+      const result = await api(`/api/matches/${encodeURIComponent(state.matchId)}/point`, {
+        method: "PUT",
+        body: { team, delta },
+      });
+      if (!state.match || result.match.revision >= state.match.revision) {
+        state.match = result.match;
+        render();
+      }
+      if (result.sideOut) {
+        showToast(`${result.match[team === "home" ? "homeName" : "awayName"]}がサイドアウト。ローテーションしました。`);
+      }
+    } catch (error) {
+      showToast(error.message, true);
+      pollMatch();
+    }
   }
 
   function handleServe(event) {
