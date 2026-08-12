@@ -48,6 +48,9 @@ h1 { margin-bottom: 0; font-size: clamp(1.25rem, 3vw, 1.9rem); }
 .team-card.home { border-top: 3px solid var(--cyan); }
 .team-heading { display: flex; gap: 8px; }
 .team-heading input { min-width: 0; flex: 1; padding: 9px 11px; color: var(--text); font-size: clamp(.95rem, 2vw, 1.2rem); font-weight: 900; background: transparent; border: 1px solid transparent; border-bottom-color: var(--line); }
+.sets-won { display: grid; min-width: 48px; place-items: center; padding: 3px 7px; background: #071119; border: 1px solid var(--line); border-radius: 7px; }
+.sets-won span { color: var(--muted); font-size: .5rem; font-weight: 900; letter-spacing: .1em; }
+.sets-won strong { color: var(--yellow); font-family: Consolas, monospace; font-size: 1.25rem; line-height: 1; }
 .serve-button { padding: 7px 11px; color: var(--muted); font-size: .72rem; font-weight: 850; }
 .serve-button.active { color: #171006; background: var(--yellow); border-color: var(--yellow); }
 .score-control { display: grid; grid-template-columns: 54px minmax(0, 1fr) 54px; gap: 12px; align-items: center; margin: 12px 0; }
@@ -118,6 +121,8 @@ h1 { margin-bottom: 0; font-size: clamp(1.25rem, 3vw, 1.9rem); }
   .team-card { padding: 8px; border-radius: 8px; }
   .team-heading { gap: 4px; }
   .team-heading input { padding: 5px 6px; font-size: .82rem; }
+  .sets-won { min-width: 40px; padding: 2px 5px; }
+  .sets-won strong { font-size: 1rem; }
   .serve-button { padding: 4px 6px; font-size: .62rem; }
   .score-control { grid-template-columns: 36px minmax(0, 1fr) 36px; gap: 5px; margin: 5px 0 7px; }
   .score-control button { height: 38px; font-size: 1.2rem; }
@@ -136,4 +141,29 @@ h1 { margin-bottom: 0; font-size: clamp(1.25rem, 3vw, 1.9rem); }
   .net span { padding: 4px 2px; font-size: .5rem; writing-mode: vertical-rl; }
   .match-footer { margin-top: 6px; padding: 7px; font-size: .65rem; }
   .match-footer button { padding: 5px 7px; font-size: .65rem; }
+}
+
+@media (orientation: landscape) and (max-height: 500px) and (max-width: 950px) {
+  body.match-active { overflow: hidden; }
+  body.match-active .scoreboard-app { height: 100dvh; min-height: 0; padding: 4px 8px; overflow: hidden; }
+  body.match-active .topbar,
+  body.match-active .match-connect,
+  body.match-active .rotation-title,
+  body.match-active .court,
+  body.match-active .rotation-actions,
+  body.match-active .match-footer { display: none; }
+  body.match-active .match-board { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100%; margin: 0; }
+  body.match-active .set-control { margin-bottom: 3px; }
+  body.match-active .set-control button { width: 27px; height: 27px; }
+  body.match-active .set-control div { padding: 2px 10px; }
+  body.match-active .teams { min-height: 0; }
+  body.match-active .team-card { display: grid; grid-template-rows: auto minmax(0, 1fr); align-content: center; padding: 6px; }
+  body.match-active .team-heading { min-height: 36px; }
+  body.match-active .team-heading input { padding: 3px 5px; font-size: .76rem; }
+  body.match-active .sets-won { min-width: 38px; padding: 1px 4px; }
+  body.match-active .sets-won span { font-size: .43rem; }
+  body.match-active .sets-won strong { font-size: .95rem; }
+  body.match-active .serve-button { min-width: 58px; padding: 3px 5px; }
+  body.match-active .score-control { align-self: center; margin: 3px 0 0; }
+  body.match-active .score-control strong { font-size: clamp(3.3rem, 14vh, 5.2rem); }
 }

@@ -527,6 +527,7 @@ function mapMatchRow(row) {
     };
   }
   const pointHistory = sanitizePointHistory(parseJsonObject(row.point_history));
+  const setWins = calculateSetWins(setScores);
   const match = {
     matchId: String(row.match_id),
     homeName: String(row.home_name),
@@ -537,6 +538,8 @@ function mapMatchRow(row) {
     servingTeam: String(row.serving_team),
     home: homeRotation,
     away: awayRotation,
+    homeSets: setWins.home,
+    awaySets: setWins.away,
     revision: Number(row.revision),
     updatedAt: String(row.updated_at),
   };
@@ -545,6 +548,19 @@ function mapMatchRow(row) {
     pointHistory: { value: pointHistory, enumerable: false },
   });
   return match;
+}
+
+function calculateSetWins(setScores) {
+  const wins = { home: 0, away: 0 };
+  Object.entries(setScores).forEach(([setNumberText, score]) => {
+    const setNumber = Number(setNumberText);
+    const target = setNumber === 5 ? 15 : 25;
+    const difference = Math.abs(score.home - score.away);
+    if (difference < 2 || Math.max(score.home, score.away) < target) return;
+    if (score.home > score.away) wins.home += 1;
+    if (score.away > score.home) wins.away += 1;
+  });
+  return wins;
 }
 
 function parseJsonObject(value) {

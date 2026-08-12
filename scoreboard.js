@@ -24,7 +24,7 @@
   }
 
   function cacheElements() {
-    ["match-id-input", "connect-button", "create-button", "connection-status", "match-board", "set-number", "set-down", "set-up", "away-name", "home-name", "away-score", "home-score", "away-rotation-label", "home-rotation-label", "away-court", "home-court", "active-match-id", "copy-match-id", "reset-match", "toast-region"].forEach((id) => {
+    ["match-id-input", "connect-button", "create-button", "connection-status", "match-board", "set-number", "set-down", "set-up", "away-name", "home-name", "away-score", "home-score", "away-sets", "home-sets", "away-rotation-label", "home-rotation-label", "away-court", "home-court", "active-match-id", "copy-match-id", "reset-match", "toast-region"].forEach((id) => {
       elements[toCamel(id)] = document.getElementById(id);
     });
     elements.scoreButtons = Array.from(document.querySelectorAll("[data-score-team]"));
@@ -120,6 +120,7 @@
   function activateMatch(match) {
     state.matchId = match.matchId;
     state.match = match;
+    document.body.classList.add("match-active");
     elements.matchBoard.hidden = false;
     elements.activeMatchId.textContent = match.matchId;
     elements.connectionStatus.textContent = `接続中：${match.matchId}（自動同期）`;
@@ -151,10 +152,17 @@
     elements.awayName.value = match.awayName;
     elements.homeScore.textContent = String(match.homeScore);
     elements.awayScore.textContent = String(match.awayScore);
+    elements.homeSets.textContent = String(match.homeSets || 0);
+    elements.awaySets.textContent = String(match.awaySets || 0);
     elements.setNumber.textContent = String(match.setNumber);
     elements.homeRotationLabel.textContent = `R${match.home.rotation}`;
     elements.awayRotationLabel.textContent = `R${match.away.rotation}`;
-    elements.serveButtons.forEach((button) => button.classList.toggle("active", button.dataset.serveTeam === match.servingTeam));
+    elements.serveButtons.forEach((button) => {
+      const isServing = button.dataset.serveTeam === match.servingTeam;
+      button.classList.toggle("active", isServing);
+      button.textContent = isServing ? "● サーブ" : "サーブ";
+      button.setAttribute("aria-pressed", String(isServing));
+    });
     document.querySelectorAll(".position").forEach((slot) => {
       const team = slot.dataset.team;
       const position = Number(slot.dataset.position);
