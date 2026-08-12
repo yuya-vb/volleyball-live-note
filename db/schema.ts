@@ -26,6 +26,8 @@ export const matches = sqliteTable("matches", {
   servingTeam: text("serving_team").notNull(),
   homeRotation: text("home_rotation").notNull(),
   awayRotation: text("away_rotation").notNull(),
+  setScores: text("set_scores").notNull(),
+  pointHistory: text("point_history").notNull(),
   revision: integer("revision").notNull(),
   updatedAt: text("updated_at").notNull(),
 });

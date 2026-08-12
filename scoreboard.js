@@ -177,26 +177,21 @@
       showToast("先に映像アプリで最初のサーブ権を設定してください。", true);
       return;
     }
-    const key = `${team}Score`;
-    const sideOut = delta === 1 && state.match.servingTeam !== team;
-    state.match[key] = Math.max(0, Math.min(99, state.match[key] + delta));
-    if (sideOut) {
-      rotateTeam(state.match[team], "next");
-      state.match.servingTeam = team;
-    }
-    render();
+    state.saving = true;
+    setScoreButtonsBusy(true);
     try {
       const result = await api(`/api/matches/${encodeURIComponent(state.matchId)}/point`, {
         method: "PUT",
         body: { team, delta },
       });
-      if (!state.match || result.match.revision >= state.match.revision) {
-        state.match = result.match;
-        render();
-      }
+      state.match = result.match;
+      render();
     } catch (error) {
       showToast(error.message, true);
       pollMatch();
+    } finally {
+      state.saving = false;
+      setScoreButtonsBusy(false);
     }
   }
 
@@ -207,10 +202,26 @@
     saveScoreState();
   }
 
-  function changeSet(delta) {
-    state.match.setNumber = Math.max(1, Math.min(9, state.match.setNumber + delta));
-    render();
-    saveScoreState();
+  async function changeSet(delta) {
+    const setNumber = Math.max(1, Math.min(9, state.match.setNumber + delta));
+    if (setNumber === state.match.setNumber) return;
+    state.saving = true;
+    elements.setDown.disabled = true;
+    elements.setUp.disabled = true;
+    try {
+      const result = await api(`/api/matches/${encodeURIComponent(state.matchId)}/set`, {
+        method: "PUT",
+        body: { setNumber },
+      });
+      state.match = result.match;
+      render();
+    } catch (error) {
+      showToast(error.message, true);
+    } finally {
+      state.saving = false;
+      elements.setDown.disabled = false;
+      elements.setUp.disabled = false;
+    }
   }
 
   function handlePlayerInput(event) {
@@ -329,6 +340,12 @@
   function setBusy(busy) {
     elements.connectButton.disabled = busy;
     elements.createButton.disabled = busy;
+  }
+
+  function setScoreButtonsBusy(busy) {
+    elements.scoreButtons.forEach((button) => {
+      button.disabled = busy;
+    });
   }
 
   function showToast(message, isError = false) {

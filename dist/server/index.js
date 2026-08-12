@@ -217,6 +217,9 @@ async function handleMatchRequest(request, url, env) {
   if (request.method === "PUT" && section === "point") {
     return updateMatchPoint(request, env, matchId);
   }
+  if (request.method === "PUT" && section === "set") {
+    return updateMatchSet(request, env, matchId);
+  }
   return jsonResponse({ error: "試合APIが見つかりません。" }, 404);
 }
 
@@ -238,13 +241,26 @@ async function updateMatchScore(request, env, matchId) {
   }
 
   await ensureMatch(env, matchId);
+  const currentMatch = mapMatchRow(await getMatchRow(env, matchId));
+  const setScores = currentMatch.setScores;
+  const pointHistory = currentMatch.pointHistory;
+  const scoresChanged =
+    currentMatch.homeScore !== value.homeScore || currentMatch.awayScore !== value.awayScore;
+  setScores[value.setNumber] = {
+    home: value.homeScore,
+    away: value.awayScore,
+  };
+  if (scoresChanged) {
+    pointHistory[String(value.setNumber)] = [];
+  }
   await env.DB.prepare(
     `UPDATE matches
      SET home_name = ?, away_name = ?, home_score = ?, away_score = ?,
-         set_number = ?, serving_team = ?, revision = revision + 1, updated_at = ?
+         set_number = ?, serving_team = ?, set_scores = ?, point_history = ?,
+         revision = revision + 1, updated_at = ?
      WHERE match_id = ?`,
   )
-    .bind(homeName, awayName, value.homeScore, value.awayScore, value.setNumber, value.servingTeam, new Date().toISOString(), matchId)
+    .bind(homeName, awayName, value.homeScore, value.awayScore, value.setNumber, value.servingTeam, JSON.stringify(setScores), JSON.stringify(pointHistory), new Date().toISOString(), matchId)
     .run();
   return jsonResponse({ match: mapMatchRow(await getMatchRow(env, matchId)) });
 }
@@ -261,12 +277,15 @@ async function updateMatchRotation(request, env, matchId) {
   }
 
   await ensureMatch(env, matchId);
+  const currentMatch = mapMatchRow(await getMatchRow(env, matchId));
+  currentMatch.pointHistory[String(currentMatch.setNumber)] = [];
   await env.DB.prepare(
     `UPDATE matches
-     SET home_rotation = ?, away_rotation = ?, revision = revision + 1, updated_at = ?
+     SET home_rotation = ?, away_rotation = ?, point_history = ?,
+         revision = revision + 1, updated_at = ?
      WHERE match_id = ?`,
   )
-    .bind(JSON.stringify(home), JSON.stringify(away), new Date().toISOString(), matchId)
+    .bind(JSON.stringify(home), JSON.stringify(away), JSON.stringify(currentMatch.pointHistory), new Date().toISOString(), matchId)
     .run();
   return jsonResponse({ match: mapMatchRow(await getMatchRow(env, matchId)) });
 }
@@ -281,12 +300,14 @@ async function updateMatchServe(request, env, matchId) {
     return jsonResponse({ error: "サーブ権の指定が正しくありません。" }, 400);
   }
   await ensureMatch(env, matchId);
+  const currentMatch = mapMatchRow(await getMatchRow(env, matchId));
+  currentMatch.pointHistory[String(currentMatch.setNumber)] = [];
   await env.DB.prepare(
     `UPDATE matches
-     SET serving_team = ?, revision = revision + 1, updated_at = ?
+     SET serving_team = ?, point_history = ?, revision = revision + 1, updated_at = ?
      WHERE match_id = ?`,
   )
-    .bind(servingTeam, new Date().toISOString(), matchId)
+    .bind(servingTeam, JSON.stringify(currentMatch.pointHistory), new Date().toISOString(), matchId)
     .run();
   return jsonResponse({ match: mapMatchRow(await getMatchRow(env, matchId)) });
 }
@@ -308,20 +329,46 @@ async function updateMatchPoint(request, env, matchId) {
     return jsonResponse({ error: "先に映像アプリで最初のサーブ権を設定してください。" }, 409);
   }
 
-  const scoreKey = team === "home" ? "homeScore" : "awayScore";
-  const previousScore = match[scoreKey];
-  const nextScore = Math.max(0, Math.min(99, match[scoreKey] + delta));
-  const sideOut = delta === 1 && nextScore !== previousScore && match.servingTeam !== team;
-  match[scoreKey] = nextScore;
-  if (sideOut) {
-    rotateRotationNext(match[team]);
-    match.servingTeam = team;
+  const historyKey = String(match.setNumber);
+  const history = match.pointHistory[historyKey] || [];
+  let sideOut = false;
+  let undone = false;
+
+  if (delta === 1) {
+    const scoreKey = team === "home" ? "homeScore" : "awayScore";
+    if (match[scoreKey] >= 99) {
+      return jsonResponse({ match, sideOut: false, undone: false });
+    }
+    history.push(createPointSnapshot(match, team));
+    if (history.length > 500) {
+      history.splice(0, history.length - 500);
+    }
+    match[scoreKey] += 1;
+    sideOut = match.servingTeam !== team;
+    if (sideOut) {
+      rotateRotationNext(match[team]);
+      match.servingTeam = team;
+    }
+  } else {
+    const lastPoint = history[history.length - 1];
+    if (!lastPoint) {
+      return jsonResponse({ error: "このセットには取り消せる得点がありません。" }, 409);
+    }
+    if (lastPoint.team !== team) {
+      return jsonResponse({ error: "直前に得点したチーム側の「−」を押してください。" }, 409);
+    }
+    history.pop();
+    restorePointSnapshot(match, lastPoint);
+    undone = true;
   }
+  match.setScores[match.setNumber] = { home: match.homeScore, away: match.awayScore };
+  match.pointHistory[historyKey] = history;
 
   await env.DB.prepare(
     `UPDATE matches
      SET home_score = ?, away_score = ?, serving_team = ?,
-         home_rotation = ?, away_rotation = ?, revision = revision + 1, updated_at = ?
+         home_rotation = ?, away_rotation = ?, set_scores = ?, point_history = ?,
+         revision = revision + 1, updated_at = ?
      WHERE match_id = ?`,
   )
     .bind(
@@ -330,6 +377,8 @@ async function updateMatchPoint(request, env, matchId) {
       match.servingTeam,
       JSON.stringify(match.home),
       JSON.stringify(match.away),
+      JSON.stringify(match.setScores),
+      JSON.stringify(match.pointHistory),
       new Date().toISOString(),
       matchId,
     )
@@ -337,7 +386,52 @@ async function updateMatchPoint(request, env, matchId) {
   return jsonResponse({
     match: mapMatchRow(await getMatchRow(env, matchId)),
     sideOut,
+    undone,
   });
+}
+
+async function updateMatchSet(request, env, matchId) {
+  const body = await readJsonBody(request);
+  if (body.error) {
+    return body.error;
+  }
+  const setNumber = body.value?.setNumber;
+  if (!Number.isInteger(setNumber) || setNumber < 1 || setNumber > 9) {
+    return jsonResponse({ error: "セット番号が正しくありません。" }, 400);
+  }
+  await ensureMatch(env, matchId);
+  const match = mapMatchRow(await getMatchRow(env, matchId));
+  match.setScores[match.setNumber] = { home: match.homeScore, away: match.awayScore };
+  const nextScores = match.setScores[setNumber] || { home: 0, away: 0 };
+  match.setScores[setNumber] = nextScores;
+  await env.DB.prepare(
+    `UPDATE matches
+     SET set_number = ?, home_score = ?, away_score = ?, set_scores = ?,
+         revision = revision + 1, updated_at = ?
+     WHERE match_id = ?`,
+  )
+    .bind(setNumber, nextScores.home, nextScores.away, JSON.stringify(match.setScores), new Date().toISOString(), matchId)
+    .run();
+  return jsonResponse({ match: mapMatchRow(await getMatchRow(env, matchId)) });
+}
+
+function createPointSnapshot(match, team) {
+  return {
+    team,
+    homeScore: match.homeScore,
+    awayScore: match.awayScore,
+    servingTeam: match.servingTeam,
+    home: sanitizeRotation(match.home),
+    away: sanitizeRotation(match.away),
+  };
+}
+
+function restorePointSnapshot(match, snapshot) {
+  match.homeScore = snapshot.homeScore;
+  match.awayScore = snapshot.awayScore;
+  match.servingTeam = snapshot.servingTeam;
+  match.home = sanitizeRotation(snapshot.home) || match.home;
+  match.away = sanitizeRotation(snapshot.away) || match.away;
 }
 
 function rotateRotationNext(rotation) {
@@ -359,8 +453,8 @@ async function ensureMatch(env, matchId) {
   await env.DB.prepare(
     `INSERT OR IGNORE INTO matches
       (match_id, home_name, away_name, home_score, away_score, set_number, serving_team,
-       home_rotation, away_rotation, revision, updated_at)
-     VALUES (?, ?, ?, 0, 0, 1, 'none', ?, ?, 1, ?)`,
+       home_rotation, away_rotation, set_scores, point_history, revision, updated_at)
+     VALUES (?, ?, ?, 0, 0, 1, 'none', ?, ?, '{"1":{"home":0,"away":0}}', '{}', 1, ?)`,
   )
     .bind(matchId, "自チーム", "相手チーム", emptyRotation, emptyRotation, now)
     .run();
@@ -369,7 +463,8 @@ async function ensureMatch(env, matchId) {
 function getMatchRow(env, matchId) {
   return env.DB.prepare(
     `SELECT match_id, home_name, away_name, home_score, away_score, set_number,
-            serving_team, home_rotation, away_rotation, revision, updated_at
+            serving_team, home_rotation, away_rotation, set_scores, point_history,
+            revision, updated_at
      FROM matches WHERE match_id = ?`,
   )
     .bind(matchId)
@@ -424,7 +519,15 @@ function mapMatchRow(row) {
   } catch {
     // Keep safe defaults when persisted JSON is invalid.
   }
-  return {
+  const setScores = sanitizeSetScores(parseJsonObject(row.set_scores));
+  if (!setScores[String(row.set_number)]) {
+    setScores[String(row.set_number)] = {
+      home: Number(row.home_score),
+      away: Number(row.away_score),
+    };
+  }
+  const pointHistory = sanitizePointHistory(parseJsonObject(row.point_history));
+  const match = {
     matchId: String(row.match_id),
     homeName: String(row.home_name),
     awayName: String(row.away_name),
@@ -437,6 +540,49 @@ function mapMatchRow(row) {
     revision: Number(row.revision),
     updatedAt: String(row.updated_at),
   };
+  Object.defineProperties(match, {
+    setScores: { value: setScores, enumerable: false },
+    pointHistory: { value: pointHistory, enumerable: false },
+  });
+  return match;
+}
+
+function parseJsonObject(value) {
+  try {
+    const parsed = JSON.parse(value || "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function sanitizeSetScores(value) {
+  const result = {};
+  for (let setNumber = 1; setNumber <= 9; setNumber += 1) {
+    const score = value[String(setNumber)];
+    if (
+      score && Number.isInteger(score.home) && score.home >= 0 && score.home <= 99 &&
+      Number.isInteger(score.away) && score.away >= 0 && score.away <= 99
+    ) {
+      result[String(setNumber)] = { home: score.home, away: score.away };
+    }
+  }
+  return result;
+}
+
+function sanitizePointHistory(value) {
+  const result = {};
+  for (let setNumber = 1; setNumber <= 9; setNumber += 1) {
+    const items = value[String(setNumber)];
+    if (!Array.isArray(items)) continue;
+    result[String(setNumber)] = items.slice(-500).filter((item) =>
+      item && ["home", "away"].includes(item.team) &&
+      Number.isInteger(item.homeScore) && Number.isInteger(item.awayScore) &&
+      ["home", "away", "none"].includes(item.servingTeam) &&
+      sanitizeRotation(item.home) && sanitizeRotation(item.away),
+    );
+  }
+  return result;
 }
 
 function validateNewNote(value) {
